@@ -1,0 +1,15 @@
+# Python 3.11+ (tested on 3.14 — pydantic 2.12+ is the first release with 3.14 wheels)
+fastapi>=0.118.0
+uvicorn[standard]>=0.37.0
+pymongo[srv]>=4.15.0   # [srv] pulls in dnspython, required for Atlas mongodb+srv:// URIs
+pydantic>=2.12.0
+pydantic-settings>=2.11.0
+PyJWT>=2.10.1
+bcrypt>=4.3.0
+python-multipart>=0.0.20
+reportlab>=4.4.4
+email-validator>=2.3.0
+
+# Production WSGI/ASGI runner used by Azure App Service (Linux only —
+# gunicorn cannot run on Windows, so it is skipped for local dev).
+gunicorn>=23.0.0; sys_platform != "win32"

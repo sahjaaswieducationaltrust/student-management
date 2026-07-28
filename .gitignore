@@ -1,0 +1,28 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# node
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+
+# build output: the deploy pipeline copies frontend/dist here
+backend/static/
+
+# test artefacts (sample PDFs)
+backend/tests/_output/
+
+# azure / deployment scratch
+*.zip
+.azure/
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
