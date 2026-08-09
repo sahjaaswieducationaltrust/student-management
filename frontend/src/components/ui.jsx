@@ -109,6 +109,29 @@ export function Empty({ icon = '🗂️', title = 'Nothing here yet', hint, acti
   )
 }
 
+const CHILD_FACES = { female: '👧', male: '👦' }
+
+/**
+ * Avatar for a child. Preschool rolls are small and staff recognise children
+ * by face, not by initials — a boy/girl figure scans faster down a list than
+ * "JG" does. Falls back to a neutral child when gender is not recorded.
+ */
+export function ChildAvatar({ gender, name = '', size }) {
+  const face = CHILD_FACES[gender] || '🧒'
+  const label = gender === 'female' ? 'Girl' : gender === 'male' ? 'Boy' : 'Child'
+  return (
+    <div
+      className="avatar child"
+      style={size ? { width: size, height: size, flexBasis: size } : undefined}
+      role="img"
+      aria-label={name ? `${label}: ${name}` : label}
+      title={label}
+    >
+      {face}
+    </div>
+  )
+}
+
 export function Badge({ tone = '', children }) {
   return <span className={`badge ${tone}`}>{children}</span>
 }

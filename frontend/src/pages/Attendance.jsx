@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from '../components/Toast'
-import { Card, Empty, Loading } from '../components/ui'
+import { Card, ChildAvatar, Empty, Loading } from '../components/ui'
 import api, { errorMessage } from '../lib/api'
-import { initials, today } from '../lib/format'
+import { today } from '../lib/format'
 
 const OPTIONS = [
   { value: 'present', label: 'Present', tone: 'green' },
@@ -158,9 +158,7 @@ export default function Attendance() {
                     <td className="muted">{index + 1}</td>
                     <td>
                       <div className="row" style={{ gap: 10, flexWrap: 'nowrap' }}>
-                        <div className="avatar" style={{ background: 'var(--brand-soft)', color: 'var(--brand-dark)' }}>
-                          {initials(r.student_name)}
-                        </div>
+                        <ChildAvatar gender={r.gender} name={r.student_name} />
                         <Link to={`/students/${r.student_id}`} className="cell-title">
                           {r.student_name}
                         </Link>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import api, { errorMessage } from '../lib/api'
-import { PAYMENT_MODES, formatDate, money, today } from '../lib/format'
+import { PAYMENT_MODES, formatDate, money, toInputDate, today } from '../lib/format'
 import { Field, Modal } from './ui'
 import { useToast } from './Toast'
 
@@ -18,6 +18,10 @@ export default function PaymentForm({ ledger, onClose, onPaid }) {
     paid_on: today(),
     reference: '',
     remarks: '',
+    // Blank means "keep the automatic schedule". Pre-filled with whatever
+    // override is already on the record so reopening the dialog does not
+    // silently drop a date the desk agreed earlier.
+    next_due_date: toInputDate(ledger?.next_due_override) || '',
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -42,6 +46,7 @@ export default function PaymentForm({ ledger, onClose, onPaid }) {
         paid_on: form.paid_on || null,
         reference: form.reference || null,
         remarks: form.remarks || null,
+        next_due_date: form.next_due_date || null,
       })
       toast.success(`Receipt ${data.receipt_no} created`)
       onPaid(data)
@@ -123,6 +128,16 @@ export default function PaymentForm({ ledger, onClose, onPaid }) {
             hint={needsReference ? 'Cheque / UPI / transaction reference' : 'Optional'}
           >
             <input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
+          </Field>
+          <Field
+            label="Next instalment due on"
+            hint="Leave blank to keep the automatic schedule"
+          >
+            <input
+              type="date"
+              value={form.next_due_date}
+              onChange={(e) => setForm({ ...form, next_due_date: e.target.value })}
+            />
           </Field>
           <Field label="Remarks" className="full">
             <input

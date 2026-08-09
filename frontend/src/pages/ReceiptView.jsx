@@ -123,6 +123,7 @@ export default function ReceiptView() {
           </div>
           <div className="who">
             <h2>{school.name}</h2>
+            {school.trust && <div className="trust">A unit of {school.trust}</div>}
             {school.tagline && <div className="tagline">{school.tagline}</div>}
             <div className="addr">{school.address}</div>
             <div className="addr">

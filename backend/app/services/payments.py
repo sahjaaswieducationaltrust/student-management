@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ..config import settings
-from ..utils import money, now_utc, serialize, to_object_id
+from ..utils import money, now_utc, person_name, serialize, to_object_id
 from .counters import next_receipt_no
 from .fees import auto_allocate_items
 
@@ -70,6 +70,7 @@ async def create_payment(
     items: list[dict[str, Any]] | None = None,
     collected_by: str | None = None,
     collected_by_id: str | None = None,
+    next_due_date: date | None = None,
 ) -> dict[str, Any]:
     """Record a payment and issue its receipt. Returns the serialised receipt."""
     amount = money(amount)
@@ -97,9 +98,7 @@ async def create_payment(
     doc = {
         "receipt_no": await next_receipt_no(db, academic_year),
         "student_id": student_id,
-        "student_name": " ".join(
-            filter(None, [student.get("first_name"), student.get("last_name")])
-        ),
+        "student_name": person_name(student.get("first_name"), student.get("last_name")),
         "admission_no": student.get("admission_no", ""),
         "classroom_name": await classroom_name(db, student.get("classroom_id")),
         "academic_year": academic_year,
@@ -117,4 +116,14 @@ async def create_payment(
     }
     result = await db.payments.insert_one(doc)
     doc["_id"] = result.inserted_id
+
+    # The desk often agrees the next instalment date while taking this one.
+    # It lives on the student, not the receipt, because it describes what is
+    # still owed rather than what was just collected.
+    if next_due_date is not None:
+        await db.students.update_one(
+            {"_id": student["_id"]},
+            {"$set": {"next_due_override": day_start(next_due_date), "updated_at": now_utc()}},
+        )
+
     return serialize(doc)

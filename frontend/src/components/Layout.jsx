@@ -67,6 +67,7 @@ export default function Layout() {
           </div>
           <div style={{ minWidth: 0 }}>
             <div className="name">{school.school_name}</div>
+            {school.school_trust && <div className="trust">{school.school_trust}</div>}
             <div className="year">
               {school.school_branch ? `${school.school_branch} · ` : ''}AY {school.academic_year}
             </div>
@@ -117,7 +118,7 @@ export default function Layout() {
           </button>
           <div>
             <h1>{title}</h1>
-            <div className="sub">{school.school_full_name || school.school_name}</div>
+            <div className="sub">{school.school_legal_line || school.school_full_name || school.school_name}</div>
           </div>
         </header>
         <main className="page">

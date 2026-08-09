@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from ..config import settings
 from ..deps import DbDep, get_current_user
 from ..schemas import DashboardStats
-from ..utils import encode_dates, money, serialize
+from ..utils import encode_dates, money, person_name, serialize
 
 router = APIRouter(prefix="/api", tags=["dashboard"], dependencies=[Depends(get_current_user)])
 
@@ -17,6 +17,8 @@ async def school_settings():
         "school_name": settings.school_name,
         "school_branch": settings.school_branch,
         "school_full_name": settings.school_full_name,
+        "school_trust": settings.school_trust,
+        "school_legal_line": settings.school_legal_line,
         "school_tagline": settings.school_tagline,
         "school_address": settings.school_address,
         "school_phone": settings.school_phone,
@@ -160,7 +162,7 @@ async def dashboard(db: DbDep):
         "recent_admissions": [
             {
                 "id": str(s["_id"]),
-                "name": " ".join(filter(None, [s.get("first_name"), s.get("last_name")])),
+                "name": person_name(s.get("first_name"), s.get("last_name")),
                 "admission_no": s.get("admission_no"),
                 "admission_date": s.get("admission_date"),
                 "classroom_name": class_names.get(s.get("classroom_id") or ""),

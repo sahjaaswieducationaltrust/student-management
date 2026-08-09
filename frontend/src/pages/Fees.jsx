@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import PaymentForm from '../components/PaymentForm'
 import { useToast } from '../components/Toast'
@@ -24,6 +24,7 @@ export default function Fees() {
   const [dueClass, setDueClass] = useState('')
   const [onlyOverdue, setOnlyOverdue] = useState(false)
   const [loadingDues, setLoadingDues] = useState(true)
+  const ledgerRef = useRef(null)
 
   useEffect(() => {
     api.get('/api/classrooms').then(({ data }) => setClassrooms(data)).catch(() => {})
@@ -69,13 +70,27 @@ export default function Fees() {
     loadDues()
   }, [loadDues])
 
-  const selectStudent = async (studentId) => {
+  /**
+   * Load a child's ledger. The ledger card renders above the dues table, so
+   * `collectNow` matters: clicking "Collect" from a row far down the page has
+   * to open the payment dialog, otherwise the result appears off-screen and
+   * the button looks dead.
+   */
+  const selectStudent = async (studentId, { collectNow = false } = {}) => {
     setLoadingLedger(true)
     setResults([])
     setSearch('')
     try {
       const { data } = await api.get(`/api/fees/ledger/${studentId}`)
       setLedger(data)
+      if (collectNow) {
+        if (data.balance > 0) {
+          setPaying(true)
+        } else {
+          toast.info(`${data.student_name} has nothing outstanding`)
+        }
+      }
+      ledgerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } catch (err) {
       toast.error(errorMessage(err))
     } finally {
@@ -143,6 +158,8 @@ export default function Fees() {
           </div>
         </Card>
       </div>
+
+      <div ref={ledgerRef} />
 
       {loadingLedger && <Loading label="Loading fee ledger…" />}
 
@@ -310,9 +327,18 @@ export default function Fees() {
                     </td>
                     <td className="nowrap">{formatDate(d.next_due_date)}</td>
                     <td className="actions">
-                      <button className="btn sm primary" onClick={() => selectStudent(d.student_id)}>
-                        Collect
-                      </button>
+                      {canManage ? (
+                        <button
+                          className="btn sm primary"
+                          onClick={() => selectStudent(d.student_id, { collectNow: true })}
+                        >
+                          Collect
+                        </button>
+                      ) : (
+                        <button className="btn sm" onClick={() => selectStudent(d.student_id)}>
+                          View
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

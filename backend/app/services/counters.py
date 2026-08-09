@@ -21,13 +21,13 @@ async def next_sequence(db: AsyncDatabase, key: str) -> int:
 async def next_admission_no(db: AsyncDatabase) -> str:
     year = date.today().year
     seq = await next_sequence(db, f"admission:{year}")
-    return f"ADM{year}{seq:04d}"
+    return f"{settings.admission_prefix}{year}{seq:04d}"
 
 
 async def next_employee_no(db: AsyncDatabase) -> str:
     year = date.today().year
     seq = await next_sequence(db, f"employee:{year}")
-    return f"EMP{year}{seq:03d}"
+    return f"{settings.employee_prefix}{year}{seq:03d}"
 
 
 async def next_receipt_no(db: AsyncDatabase, academic_year: str | None = None) -> str:

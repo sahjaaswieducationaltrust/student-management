@@ -73,6 +73,26 @@ export const PAYMENT_MODES = [
   { value: 'bank_transfer', label: 'Bank Transfer' },
 ]
 
+// Everything except `regular` is a full waiver — picking one zeroes the fee.
+// Kept in sync with FeeCategory in backend/app/schemas.py.
+export const FEE_CATEGORIES = [
+  { value: 'regular', label: 'Regular (pays fee)', free: false },
+  { value: 'staff_ward', label: 'Staff ward — free', free: true },
+  { value: 'management_ward', label: "Management / Principal's ward — free", free: true },
+  { value: 'govt_quota', label: 'Govt quota / RTE — free', free: true },
+  { value: 'financial_aid', label: 'Financial aid — free', free: true },
+]
+
+export const isFreeCategory = (value) => !!value && value !== 'regular'
+
+export function feeCategoryLabel(value) {
+  const found = FEE_CATEGORIES.find((c) => c.value === value)
+  if (!found) return 'Regular'
+  // The list labels carry a "— free" suffix for the dropdown; badges read
+  // better without it.
+  return found.label.replace(/\s*—\s*free$/, '').replace(/\s*\(pays fee\)$/, '')
+}
+
 export const FREQUENCIES = [
   { value: 'one_time', label: 'One time (at admission)' },
   { value: 'monthly', label: 'Monthly (x12)' },

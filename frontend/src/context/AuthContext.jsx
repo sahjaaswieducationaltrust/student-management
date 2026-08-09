@@ -10,6 +10,8 @@ export function AuthProvider({ children }) {
     school_name: 'Hello Kids',
     school_full_name: 'Hello Kids Preschool',
     school_branch: '',
+    school_trust: '',
+    school_legal_line: '',
     school_tagline: 'The Power of Early Childhood Education',
     academic_year: '',
     currency_symbol: '₹',

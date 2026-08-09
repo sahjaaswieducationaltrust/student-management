@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Any
@@ -5,6 +6,29 @@ from typing import Any
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import HTTPException, status
+
+# Letters only — leaves dots, hyphens and apostrophes alone so "k.r. d'souza"
+# becomes "K.R. D'Souza" rather than losing its punctuation.
+_WORD = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def title_name(value: str | None) -> str:
+    """Proper-case a person's name: "jaaswika govindu" -> "Jaaswika Govindu".
+
+    Names get typed in at the admission desk in whatever case the moment
+    allows, and they end up on receipts parents keep. Normalising on the way
+    in and on the way out means the register reads the same however it was
+    entered. Names with an internal capital ("McDonald") come back as
+    "Mcdonald" — rare enough here to be worth the trade for consistency.
+    """
+    if not value:
+        return ""
+    return _WORD.sub(lambda m: m.group(0).capitalize(), value.strip().lower())
+
+
+def person_name(*parts: str | None) -> str:
+    """Join and proper-case the pieces of a person's name."""
+    return " ".join(filter(None, (title_name(p) for p in parts)))
 
 
 def now_utc() -> datetime:

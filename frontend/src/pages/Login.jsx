@@ -32,6 +32,11 @@ export default function Login() {
           <img src="/hellokids-logo.png" alt="Hello Kids" />
         </div>
         <h1 style={{ textAlign: 'center', marginBottom: 4 }}>Hello Kids</h1>
+        {/* The settings endpoint needs a token, so the trust is named here
+            statically — this page renders before anyone has signed in. */}
+        <p className="muted small" style={{ textAlign: 'center', marginBottom: 2 }}>
+          A unit of Sahjaswi Educational Trust
+        </p>
         <p className="muted small" style={{ textAlign: 'center', marginBottom: 18 }}>
           School Management · children, teachers, fees &amp; attendance
         </p>
@@ -48,7 +53,7 @@ export default function Login() {
                 required
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="admin@school.com"
+                placeholder="you@example.com"
               />
             </Field>
 
@@ -68,9 +73,8 @@ export default function Login() {
             </button>
 
             <div className="login-hint">
-              First run? The backend creates <b>admin@school.com</b> / <b>admin123</b>
-              <br />
-              Change it from the Users page after signing in.
+              Forgotten your password? Ask an administrator to reset it from the
+              Users page.
             </div>
           </form>
         </Card>

@@ -7,17 +7,29 @@ from pymongo.errors import DuplicateKeyError
 from ..config import settings
 from ..deps import CurrentUser, DbDep, get_current_user, require_roles
 from ..schemas import (
+    FEE_CATEGORY_LABELS,
+    FeeCategory,
     FeePlanAssign,
     StudentCreate,
     StudentCreatedOut,
     StudentListResponse,
     StudentOut,
     StudentUpdate,
+    is_free_category,
 )
 from ..services.counters import next_admission_no
 from ..services.fees import build_fee_plan, summarise
 from ..services.payments import create_payment, paid_totals
-from ..utils import age_from_dob, encode_dates, money, now_utc, serialize, to_object_id
+from ..utils import (
+    age_from_dob,
+    encode_dates,
+    money,
+    now_utc,
+    person_name,
+    serialize,
+    title_name,
+    to_object_id,
+)
 
 router = APIRouter(
     prefix="/api/students", tags=["students"], dependencies=[Depends(get_current_user)]
@@ -26,9 +38,9 @@ router = APIRouter(
 ManageOnly = Depends(require_roles("admin", "staff"))
 
 
-def fee_summary(fee_plan: dict | None, paid: float) -> dict:
+def fee_summary(fee_plan: dict | None, paid: float, next_due_override=None) -> dict:
     """Compact fee position for list views — total, paid, balance, next due."""
-    summary = summarise(fee_plan, paid)
+    summary = summarise(fee_plan, paid, next_due_override)
     next_due = summary.get("next_due")
     return {
         "net_payable": summary["net_payable"],
@@ -42,7 +54,11 @@ def fee_summary(fee_plan: dict | None, paid: float) -> dict:
 
 async def enrich(db: AsyncDatabase, doc: dict, paid: float | None = None) -> dict:
     out = serialize(doc)
-    out["full_name"] = " ".join(filter(None, [out.get("first_name"), out.get("last_name")]))
+    # Proper-cased on the way out as well as on the way in, so records created
+    # before the normalisation existed still read correctly.
+    out["first_name"] = title_name(out.get("first_name"))
+    out["last_name"] = title_name(out.get("last_name")) or None
+    out["full_name"] = person_name(out.get("first_name"), out.get("last_name"))
     out["age"] = age_from_dob(out.get("date_of_birth"))
     out["classroom_name"] = None
     if out.get("classroom_id"):
@@ -55,7 +71,12 @@ async def enrich(db: AsyncDatabase, doc: dict, paid: float | None = None) -> dic
     if paid is None:
         totals = await paid_totals(db, [out["id"]])
         paid = totals.get(out["id"], 0.0)
-    out["fee_summary"] = fee_summary(doc.get("fee_plan"), paid)
+    out["fee_summary"] = fee_summary(
+        doc.get("fee_plan"), paid, doc.get("next_due_override")
+    )
+    out["fee_category_label"] = FEE_CATEGORY_LABELS.get(
+        out.get("fee_category") or FeeCategory.regular.value, "Regular"
+    )
     return out
 
 
@@ -103,7 +124,11 @@ async def list_students(
 
     rows = []
     for doc in docs:
-        summary = fee_summary(doc.get("fee_plan"), paid_map.get(str(doc["_id"]), 0.0))
+        summary = fee_summary(
+            doc.get("fee_plan"),
+            paid_map.get(str(doc["_id"]), 0.0),
+            doc.get("next_due_override"),
+        )
         if dues == "pending" and summary["balance"] <= 0.01:
             continue
         if dues == "overdue" and summary["overdue_amount"] <= 0.01:
@@ -139,6 +164,8 @@ async def create_student(payload: StudentCreate, db: DbDep, user: CurrentUser):
     doc = encode_dates(
         payload.model_dump(exclude={"admission_no", "agreed_fee", "fee_note", "initial_payment"})
     )
+    doc["first_name"] = title_name(doc.get("first_name"))
+    doc["last_name"] = title_name(doc.get("last_name")) or None
     doc["admission_no"] = payload.admission_no or await next_admission_no(db)
     doc["admission_date"] = doc.get("admission_date") or encode_dates(now_utc().date())
     doc["created_at"] = now_utc()
@@ -157,13 +184,22 @@ async def create_student(payload: StudentCreate, db: DbDep, user: CurrentUser):
         components = classroom.get("fee_components") or []
         academic_year = classroom.get("academic_year") or settings.academic_year
 
-    if components or payload.agreed_fee is not None:
+    # A concession category is a full waiver and overrides whatever fee was
+    # typed in, so a mis-keyed amount can never make a free seat billable.
+    free_seat = is_free_category(doc.get("fee_category"))
+    agreed_fee = 0.0 if free_seat else payload.agreed_fee
+    fee_note = payload.fee_note
+    if free_seat:
+        label = FEE_CATEGORY_LABELS[doc["fee_category"]]
+        fee_note = f"{label} — no fee" + (f" ({payload.fee_note})" if payload.fee_note else "")
+
+    if components or agreed_fee is not None:
         doc["fee_plan"] = encode_dates(
             build_fee_plan(
                 components,
                 academic_year=academic_year,
-                agreed_total=payload.agreed_fee,
-                discount_reason=payload.fee_note,
+                agreed_total=agreed_fee,
+                discount_reason=fee_note,
             )
         )
 
@@ -206,6 +242,9 @@ async def update_student(student_id: str, payload: StudentUpdate, db: DbDep):
     updates = encode_dates(payload.model_dump(exclude_none=True))
     if not updates:
         raise HTTPException(status_code=400, detail="Nothing to update")
+    for field in ("first_name", "last_name"):
+        if field in updates:
+            updates[field] = title_name(updates[field]) or None
     if updates.get("classroom_id"):
         exists = await db.classrooms.count_documents(
             {"_id": to_object_id(updates["classroom_id"], "classroom id")}
@@ -213,6 +252,21 @@ async def update_student(student_id: str, payload: StudentUpdate, db: DbDep):
         if not exists:
             raise HTTPException(status_code=400, detail="Classroom not found")
     updates["updated_at"] = now_utc()
+
+    # Moving a child onto a concession category has to zero the money as well as
+    # the label, otherwise a staff ward keeps showing up in the dues list.
+    if is_free_category(updates.get("fee_category")):
+        existing = await get_student_or_404(db, student_id)
+        plan = existing.get("fee_plan") or {}
+        label = FEE_CATEGORY_LABELS[updates["fee_category"]]
+        updates["fee_plan"] = encode_dates(
+            build_fee_plan(
+                plan.get("items") or [],
+                academic_year=plan.get("academic_year") or settings.academic_year,
+                agreed_total=0.0,
+                discount_reason=f"{label} — no fee",
+            )
+        )
 
     doc = await db.students.find_one_and_update(
         {"_id": to_object_id(student_id, "student id")},
@@ -263,23 +317,42 @@ async def assign_fee_plan(student_id: str, payload: FeePlanAssign, db: DbDep):
             )
 
     components.extend(c.model_dump() for c in payload.extra_items)
-    if not components and payload.agreed_fee is None:
+
+    # The category on the payload wins; falling back to the one already on the
+    # record means rebuilding a free seat's plan cannot silently start charging.
+    category = (
+        payload.fee_category.value
+        if payload.fee_category is not None
+        else student.get("fee_category")
+    )
+    free_seat = is_free_category(category)
+
+    if not components and payload.agreed_fee is None and not free_seat:
         raise HTTPException(
             status_code=400,
             detail="No fee components found. Add a fee structure to the class, "
                    "provide extra items, or set an agreed fee.",
         )
 
+    reason = payload.discount_reason
+    if free_seat:
+        label = FEE_CATEGORY_LABELS[category]
+        reason = f"{label} — no fee" + (f" ({reason})" if reason else "")
+
     plan = build_fee_plan(
         components,
         academic_year=academic_year,
-        agreed_total=payload.agreed_fee,
-        discount=payload.discount,
-        discount_reason=payload.discount_reason,
+        agreed_total=0.0 if free_seat else payload.agreed_fee,
+        discount=0 if free_seat else payload.discount,
+        discount_reason=reason,
     )
+    updates: dict = {"fee_plan": encode_dates(plan), "updated_at": now_utc()}
+    if payload.fee_category is not None:
+        updates["fee_category"] = payload.fee_category.value
+
     doc = await db.students.find_one_and_update(
         {"_id": student["_id"]},
-        {"$set": {"fee_plan": encode_dates(plan), "updated_at": now_utc()}},
+        {"$set": updates},
         return_document=True,
     )
     return await enrich(db, doc)
