@@ -117,22 +117,28 @@ export default function ReceiptView() {
       </div>
 
       <div className="receipt-sheet">
-        <header className="receipt-head">
-          <div className="mark">
-            <img src="/hellokids-logo.png" alt="" />
-          </div>
-          <div className="who">
-            <h2>{school.name}</h2>
-            {school.trust && <div className="trust">A unit of {school.trust}</div>}
-            {school.tagline && <div className="tagline">{school.tagline}</div>}
-            <div className="addr">{school.address}</div>
-            <div className="addr">
-              Phone: {school.phone} · {school.email}
-              {school.website ? ` · ${school.website}` : ''}
+        {school.letterhead_file ? (
+          <header className="receipt-letterhead">
+            <img src={`/${school.letterhead_file}`} alt={school.name} />
+          </header>
+        ) : (
+          <header className="receipt-head">
+            <div className="mark">
+              <img src="/hellokids-logo.png" alt="" />
             </div>
-          </div>
-          <div className="rule" />
-        </header>
+            <div className="who">
+              <h2>{school.name}</h2>
+              {school.trust && <div className="trust">A unit of {school.trust}</div>}
+              {school.tagline && <div className="tagline">{school.tagline}</div>}
+              <div className="addr">{school.address}</div>
+              <div className="addr">
+                Phone: {school.phone} · {school.email}
+                {school.website ? ` · ${school.website}` : ''}
+              </div>
+            </div>
+            <div className="rule" />
+          </header>
+        )}
 
         <div className={`receipt-title ${payment.cancelled ? 'cancelled' : ''}`}>
           {payment.cancelled ? 'FEE RECEIPT — CANCELLED' : 'FEE RECEIPT'}

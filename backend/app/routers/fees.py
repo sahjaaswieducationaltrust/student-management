@@ -43,6 +43,9 @@ SCHOOL = {
     "email": settings.school_email,
     "website": settings.school_website,
     "currency": settings.currency_symbol,
+    # The on-screen receipt mirrors the PDF: when the banner exists it replaces
+    # the composed header rather than sitting above a duplicate of itself.
+    "letterhead_file": settings.letterhead_filename,
 }
 
 
@@ -105,6 +108,7 @@ async def collect_payment(payload: PaymentCreate, db: DbDep, user: CurrentUser):
         reference=payload.reference,
         remarks=payload.remarks,
         items=[i.model_dump() for i in payload.items] if payload.items else None,
+        particulars=payload.particulars,
         collected_by=user.get("name"),
         collected_by_id=user.get("id"),
         next_due_date=payload.next_due_date,

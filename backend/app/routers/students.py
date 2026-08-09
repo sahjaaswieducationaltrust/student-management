@@ -223,6 +223,7 @@ async def create_student(payload: StudentCreate, db: DbDep, user: CurrentUser):
             paid_on=initial.paid_on,
             reference=initial.reference,
             remarks=initial.remarks,
+            particulars=initial.particulars,
             collected_by=user.get("name"),
             collected_by_id=user.get("id"),
         )

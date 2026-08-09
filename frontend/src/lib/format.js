@@ -93,6 +93,24 @@ export function feeCategoryLabel(value) {
   return found.label.replace(/\s*—\s*free$/, '').replace(/\s*\(pays fee\)$/, '')
 }
 
+// What a payment is collected for — printed as the receipt's particulars.
+// The blank value falls back to describing the payment from the instalment
+// schedule, which is what the app did before this was selectable.
+export const FEE_PARTICULARS = [
+  { value: '', label: 'Automatic (from the fee schedule)' },
+  { value: '1st Term Fee', label: '1st Term Fee' },
+  { value: '2nd Term Fee', label: '2nd Term Fee' },
+  { value: '3rd Term Fee', label: '3rd Term Fee' },
+  { value: 'Full Payment', label: 'Full Payment' },
+  { value: 'Admission Fee', label: 'Admission Fee' },
+  { value: 'School Kit / Uniform', label: 'School Kit / Uniform' },
+  { value: 'Transport Fee', label: 'Transport Fee' },
+  { value: 'Miscellaneous', label: 'Miscellaneous' },
+  { value: '__custom__', label: 'Other — type your own…' },
+]
+
+export const CUSTOM_PARTICULARS = '__custom__'
+
 export const FREQUENCIES = [
   { value: 'one_time', label: 'One time (at admission)' },
   { value: 'monthly', label: 'Monthly (x12)' },

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import api, { errorMessage } from '../lib/api'
 import {
+  CUSTOM_PARTICULARS,
   FEE_CATEGORIES,
+  FEE_PARTICULARS,
   PAYMENT_MODES,
   annualTotal,
   isFreeCategory,
@@ -48,6 +50,7 @@ const blank = {
   initial_mode: 'cash',
   initial_reference: '',
   initial_date: today(),
+  initial_particulars: 'Admission Fee',
 }
 
 function fromStudent(student) {
@@ -133,9 +136,10 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
     })
     for (const key of [
       'id', 'admission_no', 'full_name', 'age', 'classroom_name', 'created_at',
-      'fee_plan', 'fee_summary', 'initial_receipt',
+      'fee_plan', 'fee_summary', 'fee_category_label', 'next_due_override',
+      'initial_receipt',
       'agreed_fee', 'fee_note', 'collect_initial', 'initial_amount',
-      'initial_mode', 'initial_reference', 'initial_date',
+      'initial_mode', 'initial_reference', 'initial_date', 'initial_particulars',
     ]) {
       delete payload[key]
     }
@@ -151,6 +155,7 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
           paid_on: form.initial_date || null,
           reference: form.initial_reference || null,
           remarks: 'Initial admission payment',
+          particulars: form.initial_particulars || null,
         }
       }
     }
@@ -382,6 +387,15 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
                 </Field>
                 <Field label="Reference no." hint="Cheque / UPI / transaction reference">
                   <input value={form.initial_reference} onChange={set('initial_reference')} />
+                </Field>
+                <Field label="Paid towards" className="full" hint="Printed as the particulars on the receipt">
+                  <select value={form.initial_particulars} onChange={set('initial_particulars')}>
+                    {FEE_PARTICULARS.filter((p) => p.value && p.value !== CUSTOM_PARTICULARS).map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
                 </Field>
               </>
             )}

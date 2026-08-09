@@ -220,6 +220,7 @@ class InitialPayment(BaseModel):
     paid_on: date | None = None
     reference: str | None = Field(default=None, max_length=80)
     remarks: str | None = Field(default="Initial admission payment", max_length=300)
+    particulars: str | None = Field(default=None, max_length=120)
 
 
 class StudentCreate(StudentBase):
@@ -380,6 +381,10 @@ class PaymentCreate(BaseModel):
     reference: str | None = Field(default=None, max_length=80)
     remarks: str | None = Field(default=None, max_length=300)
     items: list[PaymentItem] | None = None  # defaults to auto-allocation
+    # What the money is being collected for, e.g. "1st Term Fee". Printed as
+    # the receipt's particulars. Omit to describe the payment from the
+    # instalment schedule instead.
+    particulars: str | None = Field(default=None, max_length=120)
     # When the desk agrees a date for the next instalment, it is recorded here
     # and replaces the auto-computed one. Omit to keep the automatic schedule.
     next_due_date: date | None = None

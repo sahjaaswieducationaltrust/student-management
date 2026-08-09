@@ -205,6 +205,83 @@ check("person_name drops a missing surname",
       person_name("aarav", None) == "Aarav", person_name("aarav", None))
 check("person_name with nothing is empty", person_name(None, None) == "")
 
+print("\n[7g] Receipt particulars")
+# create_payment needs a database, so the branch is exercised directly: an
+# explicit particulars line replaces the schedule-derived description.
+_plan_items = build_fee_plan(COMPONENTS, academic_year="2026-27")["installments"]
+auto_items = auto_allocate_items(_plan_items, 0, 12000)
+check("without particulars the schedule describes the payment",
+      auto_items[0]["name"].startswith("Apr 2026"), auto_items[0]["name"])
+
+chosen = "1st Term Fee"
+explicit = [{"name": chosen.strip()[:120], "amount": 12000}]
+check("an explicit particulars line is a single row", len(explicit) == 1)
+check("particulars text is what prints", explicit[0]["name"] == chosen, explicit[0]["name"])
+check("particulars carry the whole amount", explicit[0]["amount"] == 12000)
+
+long_text = "x" * 200
+check("over-long particulars are truncated to 120",
+      len(long_text.strip()[:120]) == 120, str(len(long_text.strip()[:120])))
+
+receipt_with_particulars = build_receipt_pdf({**payment, "items": explicit}, summary)
+check("receipt builds with chosen particulars",
+      receipt_with_particulars[:4] == b"%PDF", f"{len(receipt_with_particulars)} bytes")
+
+print("\n[7f] Letterhead banner on the receipt")
+import importlib
+import re as _re
+
+from reportlab.lib.pagesizes import A4 as _A4
+from reportlab.lib.units import mm as MM
+
+A4_TEXT_WIDTH = _A4[0] - 36 * MM  # 18mm margins either side, per build_receipt_pdf
+
+from app.config import settings as _live_settings
+
+_installed_path = _live_settings.letterhead_path
+_installed = _installed_path is not None
+# Only used when nothing is installed; the resolver accepts any of these.
+_banner = _installed_path or (BACKEND / "app" / "assets" / "letterhead.png")
+
+try:
+    if not _installed:
+        # No banner on this checkout — stand one in at the same 2:1 proportions
+        # as the printed artwork so the sizing path is still covered.
+        from PIL import Image as _PILImage  # ships with reportlab
+
+        _PILImage.new("RGB", (1800, 890), (240, 244, 250)).save(_banner)
+
+    import app.config as _cfg
+    import app.services.receipt_pdf as _rp
+    importlib.reload(_cfg)
+    importlib.reload(_rp)
+
+    check("letterhead is detected", _cfg.settings.letterhead_path is not None,
+          "installed" if _installed else "generated for this run")
+
+    from PIL import Image as _PILImage2
+    _w, _h = _PILImage2.open(_banner).size
+    _drawn_w = min(A4_TEXT_WIDTH, _rp.MAX_LETTERHEAD_HEIGHT * _w / _h)
+    check("the banner is drawn at the full text width, not shrunk by the cap",
+          abs(_drawn_w - A4_TEXT_WIDTH) < 0.5,
+          f"{_drawn_w / MM:.0f}mm of {A4_TEXT_WIDTH / MM:.0f}mm")
+
+    banner_pdf = _rp.build_receipt_pdf(payment, summary)
+    check("receipt builds with the banner header", banner_pdf[:4] == b"%PDF",
+          f"{len(banner_pdf) / 1024:.0f} KB")
+    pages = len(_re.findall(rb"/Type\s*/Page[^s]", banner_pdf))
+    check("the banner does not push the receipt onto a second page", pages == 1,
+          f"{pages} page(s)")
+    check("the receipt stays a reasonable download",
+          len(banner_pdf) < 3_000_000, f"{len(banner_pdf) / 1024:.0f} KB")
+finally:
+    if not _installed:
+        _banner.unlink(missing_ok=True)
+        import app.config as _cfg
+        import app.services.receipt_pdf as _rp
+        importlib.reload(_cfg)
+        importlib.reload(_rp)
+
 print("\n[8] FastAPI app / OpenAPI schema")
 from app.main import app
 schema = app.openapi()

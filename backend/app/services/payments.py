@@ -68,6 +68,7 @@ async def create_payment(
     reference: str | None = None,
     remarks: str | None = None,
     items: list[dict[str, Any]] | None = None,
+    particulars: str | None = None,
     collected_by: str | None = None,
     collected_by_id: str | None = None,
     next_due_date: date | None = None,
@@ -89,6 +90,11 @@ async def create_payment(
                 status_code=400,
                 detail=f"Line items total {item_total} does not match the amount {amount}",
             )
+    elif particulars and particulars.strip():
+        # The desk said what this is for. That reads far better on a receipt
+        # than a schedule-derived label, especially when the whole year sits in
+        # one instalment and every payment would otherwise say the same thing.
+        items = [{"name": particulars.strip()[:120], "amount": amount}]
     else:
         items = auto_allocate_items(installments, already_paid, amount)
 
