@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     school_email: str = "info@hellokids.co.in"
     school_website: str = "www.hellokids.co.in"
     school_logo: str = "hellokids-logo.png"  # file in backend/app/assets/
+    # Optional pre-designed banner (the printed letterhead). When the file is
+    # present it replaces the whole composed receipt header — logo, names,
+    # tagline, address and phone are all already inside the artwork, so
+    # repeating them below it would just duplicate the information.
+    # Give a bare name to accept any of the extensions below, or a full
+    # filename to pin one exactly.
+    school_letterhead: str = "letterhead"  # file in backend/app/assets/
     currency_symbol: str = "₹"
     currency_code: str = "INR"
 
@@ -58,6 +65,28 @@ class Settings(BaseSettings):
     def logo_path(self) -> Path | None:
         path = Path(__file__).parent / "assets" / self.school_logo
         return path if path.is_file() else None
+
+    @property
+    def letterhead_path(self) -> Path | None:
+        """The banner file, whatever image format it was supplied in."""
+        if not self.school_letterhead:
+            return None
+        assets = Path(__file__).parent / "assets"
+        name = Path(self.school_letterhead)
+        if name.suffix:
+            path = assets / name
+            return path if path.is_file() else None
+        for suffix in (".jpg", ".jpeg", ".png", ".webp"):
+            path = assets / f"{name}{suffix}"
+            if path.is_file():
+                return path
+        return None
+
+    @property
+    def letterhead_filename(self) -> str | None:
+        """Name the SPA serves the same banner under, from frontend/public/."""
+        path = self.letterhead_path
+        return path.name if path else None
 
     # --- academics ---
     academic_year: str = "2026-27"

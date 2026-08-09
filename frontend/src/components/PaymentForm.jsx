@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react'
 import api, { errorMessage } from '../lib/api'
-import { PAYMENT_MODES, formatDate, money, toInputDate, today } from '../lib/format'
+import {
+  CUSTOM_PARTICULARS,
+  FEE_PARTICULARS,
+  PAYMENT_MODES,
+  formatDate,
+  money,
+  toInputDate,
+  today,
+} from '../lib/format'
 import { Field, Modal } from './ui'
 import { useToast } from './Toast'
 
@@ -18,6 +26,8 @@ export default function PaymentForm({ ledger, onClose, onPaid }) {
     paid_on: today(),
     reference: '',
     remarks: '',
+    particulars: '',
+    custom_particulars: '',
     // Blank means "keep the automatic schedule". Pre-filled with whatever
     // override is already on the record so reopening the dialog does not
     // silently drop a date the desk agreed earlier.
@@ -30,10 +40,18 @@ export default function PaymentForm({ ledger, onClose, onPaid }) {
   const balanceAfter = useMemo(() => (ledger?.balance ?? 0) - amount, [ledger, amount])
   const needsReference = ['cheque', 'bank_transfer', 'upi', 'card'].includes(form.mode)
 
+  // Blank means "let the backend describe it from the schedule".
+  const particulars =
+    form.particulars === CUSTOM_PARTICULARS ? form.custom_particulars.trim() : form.particulars
+
   const submit = async (event) => {
     event.preventDefault()
     if (amount <= 0) {
       setError('Enter an amount greater than zero')
+      return
+    }
+    if (form.particulars === CUSTOM_PARTICULARS && !particulars) {
+      setError('Type what this payment is for, or pick one of the listed particulars.')
       return
     }
     setBusy(true)
@@ -46,6 +64,7 @@ export default function PaymentForm({ ledger, onClose, onPaid }) {
         paid_on: form.paid_on || null,
         reference: form.reference || null,
         remarks: form.remarks || null,
+        particulars: particulars || null,
         next_due_date: form.next_due_date || null,
       })
       toast.success(`Receipt ${data.receipt_no} created`)
@@ -120,6 +139,33 @@ export default function PaymentForm({ ledger, onClose, onPaid }) {
               ))}
             </select>
           </Field>
+          <Field
+            label="Paid towards"
+            className={form.particulars === CUSTOM_PARTICULARS ? '' : 'full'}
+            hint="Printed as the particulars on the receipt"
+          >
+            <select
+              value={form.particulars}
+              onChange={(e) => setForm({ ...form, particulars: e.target.value })}
+            >
+              {FEE_PARTICULARS.map((p) => (
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {form.particulars === CUSTOM_PARTICULARS && (
+            <Field label="Particulars" required>
+              <input
+                required
+                maxLength={120}
+                value={form.custom_particulars}
+                onChange={(e) => setForm({ ...form, custom_particulars: e.target.value })}
+                placeholder="e.g. Annual Day charges"
+              />
+            </Field>
+          )}
           <Field label="Payment date">
             <input type="date" max={today()} value={form.paid_on} onChange={(e) => setForm({ ...form, paid_on: e.target.value })} />
           </Field>

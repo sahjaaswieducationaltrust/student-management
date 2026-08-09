@@ -8,6 +8,7 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.platypus import (
     HRFlowable,
     Image,
@@ -27,6 +28,12 @@ BRAND = colors.HexColor("#0054a5")  # Hello Kids blue
 LIME = colors.HexColor("#6f8a1c")  # readable version of the logo's lime
 LINE = colors.HexColor("#d8dce6")
 SOFT = colors.HexColor("#eaf1f8")
+
+# A letterhead is meant to span the page, so the banner is scaled to the full
+# text width and this only guards against a source that is unusually tall — a
+# near-square image would otherwise push the ledger onto a second sheet. The
+# supplied 2:1 banner lands at 174 x 87mm and stays well inside it.
+MAX_LETTERHEAD_HEIGHT = 95 * mm
 
 
 def _styles() -> dict[str, ParagraphStyle]:
@@ -90,46 +97,60 @@ def build_receipt_pdf(payment: dict[str, Any], ledger: dict[str, Any]) -> bytes:
     flow: list = []
 
     # ---------------- header ----------------
-    contact = f"Phone: {settings.school_phone} &nbsp;|&nbsp; {settings.school_email}"
-    if settings.school_website:
-        contact += f" &nbsp;|&nbsp; {settings.school_website}"
-
-    masthead = [
-        Paragraph(settings.school_full_name, st["school"]),
-    ]
-    # The trust is the legal recipient of the money, so it belongs on the
-    # receipt directly under the school name.
-    if settings.school_trust:
-        masthead.append(Paragraph(f"A unit of {settings.school_trust}", st["trust"]))
-    masthead += [
-        Paragraph(settings.school_tagline, st["tagline"]),
-        Spacer(1, 3),
-        Paragraph(settings.school_address, st["sub"]),
-        Paragraph(contact, st["sub"]),
-    ]
-
-    logo = settings.logo_path
-    if logo:
-        # Square logo, kept small so the 90px source stays crisp in print.
-        mark = Image(str(logo), width=19 * mm, height=19 * mm, kind="proportional")
-        header = Table(
-            [[mark, masthead, ""]],
-            colWidths=[22 * mm, content_width - 44 * mm, 22 * mm],
-        )
-        header.setStyle(
-            TableStyle(
-                [
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 0),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                    ("TOPPADDING", (0, 0), (-1, -1), 0),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-                ]
-            )
-        )
-        flow.append(header)
+    letterhead = settings.letterhead_path
+    if letterhead:
+        # The printed banner already carries the trust, the school, the tagline,
+        # the address and the phone number, so it stands in for the whole
+        # composed masthead. Scaled to the text width, but capped in height so a
+        # tall source cannot push the receipt body onto a second page.
+        src_w, src_h = ImageReader(str(letterhead)).getSize()
+        width, height = content_width, content_width * src_h / src_w
+        if height > MAX_LETTERHEAD_HEIGHT:
+            height, width = MAX_LETTERHEAD_HEIGHT, MAX_LETTERHEAD_HEIGHT * src_w / src_h
+        banner = Image(str(letterhead), width=width, height=height)
+        banner.hAlign = "CENTER"
+        flow.append(banner)
     else:
-        flow.extend(masthead)
+        contact = f"Phone: {settings.school_phone} &nbsp;|&nbsp; {settings.school_email}"
+        if settings.school_website:
+            contact += f" &nbsp;|&nbsp; {settings.school_website}"
+
+        masthead = [
+            Paragraph(settings.school_full_name, st["school"]),
+        ]
+        # The trust is the legal recipient of the money, so it belongs on the
+        # receipt directly under the school name.
+        if settings.school_trust:
+            masthead.append(Paragraph(f"A unit of {settings.school_trust}", st["trust"]))
+        masthead += [
+            Paragraph(settings.school_tagline, st["tagline"]),
+            Spacer(1, 3),
+            Paragraph(settings.school_address, st["sub"]),
+            Paragraph(contact, st["sub"]),
+        ]
+
+        logo = settings.logo_path
+        if logo:
+            # Square logo, kept small so the 90px source stays crisp in print.
+            mark = Image(str(logo), width=19 * mm, height=19 * mm, kind="proportional")
+            header = Table(
+                [[mark, masthead, ""]],
+                colWidths=[22 * mm, content_width - 44 * mm, 22 * mm],
+            )
+            header.setStyle(
+                TableStyle(
+                    [
+                        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                        ("TOPPADDING", (0, 0), (-1, -1), 0),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ]
+                )
+            )
+            flow.append(header)
+        else:
+            flow.extend(masthead)
 
     flow.append(Spacer(1, 7))
     flow.append(HRFlowable(width="100%", thickness=1.6, color=BRAND, spaceAfter=8))

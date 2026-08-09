@@ -26,6 +26,7 @@ async def school_settings():
         "school_website": settings.school_website,
         "currency_symbol": settings.currency_symbol,
         "academic_year": settings.academic_year,
+        "letterhead_file": settings.letterhead_filename,
     }
 
 
