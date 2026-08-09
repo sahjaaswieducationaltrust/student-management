@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import StudentForm from '../components/StudentForm'
 import { useToast } from '../components/Toast'
-import { Card, Confirm, Empty, Loading, Pagination, StatusBadge } from '../components/ui'
+import { Card, ChildAvatar, Confirm, Empty, Loading, Pagination, StatusBadge } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import api, { errorMessage } from '../lib/api'
-import { formatDate, initials, money } from '../lib/format'
+import { feeCategoryLabel, formatDate, isFreeCategory, money } from '../lib/format'
 
 const PAGE_SIZE = 15
 
@@ -208,9 +208,7 @@ export default function Students() {
                     <tr key={s.id}>
                       <td>
                         <div className="row" style={{ gap: 10, flexWrap: 'nowrap' }}>
-                          <div className="avatar" style={{ background: 'var(--brand-soft)', color: 'var(--brand-dark)' }}>
-                            {initials(s.full_name)}
-                          </div>
+                          <ChildAvatar gender={s.gender} name={s.full_name} />
                           <div style={{ minWidth: 0 }}>
                             <Link to={`/students/${s.id}`} className="cell-title">
                               {s.full_name}
@@ -229,7 +227,16 @@ export default function Students() {
                         <div className="cell-sub">{s.guardian?.father_name || s.guardian?.mother_name || ''}</div>
                       </td>
                       <td className="num">
-                        {s.fee_summary?.net_payable ? money(s.fee_summary.net_payable) : <span className="muted">—</span>}
+                        {isFreeCategory(s.fee_category) ? (
+                          <>
+                            <span className="badge green">free</span>
+                            <div className="cell-sub">{feeCategoryLabel(s.fee_category)}</div>
+                          </>
+                        ) : s.fee_summary?.net_payable ? (
+                          money(s.fee_summary.net_payable)
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
                       </td>
                       <td className="num text-green">{money(s.fee_summary?.total_paid)}</td>
                       <td className="num strong">

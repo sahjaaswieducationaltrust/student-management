@@ -5,7 +5,7 @@ from pymongo import UpdateOne
 
 from ..deps import CurrentUser, DbDep, get_current_user
 from ..schemas import AttendanceBulkCreate, AttendanceOut
-from ..utils import encode_dates, now_utc, to_object_id
+from ..utils import encode_dates, now_utc, person_name, to_object_id
 
 router = APIRouter(
     prefix="/api/attendance", tags=["attendance"], dependencies=[Depends(get_current_user)]
@@ -38,9 +38,8 @@ async def attendance_sheet(
             {
                 "id": str(mark["_id"]) if mark else None,
                 "student_id": sid,
-                "student_name": " ".join(
-                    filter(None, [student.get("first_name"), student.get("last_name")])
-                ),
+                "student_name": person_name(student.get("first_name"), student.get("last_name")),
+                "gender": student.get("gender"),
                 "admission_no": student.get("admission_no", ""),
                 "classroom_id": classroom_id,
                 "date": on,

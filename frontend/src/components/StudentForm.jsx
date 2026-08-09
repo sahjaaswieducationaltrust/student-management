@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import api, { errorMessage } from '../lib/api'
-import { PAYMENT_MODES, annualTotal, money, titleCase, toInputDate, today } from '../lib/format'
+import {
+  FEE_CATEGORIES,
+  PAYMENT_MODES,
+  annualTotal,
+  isFreeCategory,
+  money,
+  titleCase,
+  toInputDate,
+  today,
+} from '../lib/format'
 import { Field, Modal } from './ui'
 import { useToast } from './Toast'
 
@@ -30,6 +39,7 @@ const blank = {
   transport_opted: false,
   transport_route: '',
   notes: '',
+  fee_category: 'regular',
   // fee agreement (new enrolments only)
   agreed_fee: '',
   fee_note: '',
@@ -79,13 +89,19 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
   )
   const components = selectedClass?.fee_components || []
   const standardFee = useMemo(() => annualTotal(components), [components])
+  const freeSeat = isFreeCategory(form.fee_category)
 
   // Picking a class loads that class's standard fee into the agreed-fee box,
   // which the admin then overrides with whatever was settled with the parents.
+  // A concession category is a full waiver, so it pins the box to zero instead.
   useEffect(() => {
     if (student) return // editing: never touch an existing fee plan
-    setForm((f) => ({ ...f, agreed_fee: standardFee ? String(standardFee) : '' }))
-  }, [standardFee, student])
+    setForm((f) => ({
+      ...f,
+      agreed_fee: freeSeat ? '0' : standardFee ? String(standardFee) : '',
+      collect_initial: freeSeat ? false : f.collect_initial,
+    }))
+  }, [standardFee, student, freeSeat])
 
   const agreedFee = Number(form.agreed_fee || 0)
   const difference = agreedFee - standardFee
@@ -208,6 +224,24 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
         <Field label="Admission date">
           <input type="date" value={form.admission_date || ''} onChange={set('admission_date')} />
         </Field>
+        <Field
+          label="Fee category"
+          hint={freeSeat ? 'This child pays nothing — the fee is set to zero' : 'Concession categories waive the fee entirely'}
+        >
+          <select value={form.fee_category || 'regular'} onChange={set('fee_category')}>
+            {FEE_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {student && freeSeat && (
+          <div className="alert info full">
+            Saving with a concession category clears this child's fee plan and removes
+            them from the outstanding dues list. Receipts already issued are untouched.
+          </div>
+        )}
         {student && (
           <Field label="Status">
             <select value={form.status} onChange={set('status')}>
@@ -222,7 +256,13 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
           <>
             <div className="section-label">Fee agreement</div>
             <div className="full">
-              {!form.classroom_id ? (
+              {freeSeat ? (
+                <div className="alert success">
+                  <b>{FEE_CATEGORIES.find((c) => c.value === form.fee_category)?.label}</b> — no
+                  fee is charged for this child. Nothing to collect now, and they will not
+                  appear in the outstanding dues list.
+                </div>
+              ) : !form.classroom_id ? (
                 <div className="alert info">
                   Pick a class above to load its fee structure. You can also enrol without a
                   class and set the fee later from the child's profile.
@@ -259,6 +299,8 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
               )}
             </div>
 
+            {!freeSeat && (
+              <>
             <Field
               label="Total fee agreed with parents"
               required={!!form.classroom_id}
@@ -363,6 +405,8 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
                   </b>
                 </div>
               </div>
+            )}
+              </>
             )}
           </>
         )}

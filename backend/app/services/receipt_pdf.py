@@ -19,7 +19,7 @@ from reportlab.platypus import (
 )
 
 from ..config import settings
-from ..utils import amount_in_words, money, payment_mode_label
+from ..utils import amount_in_words, money, payment_mode_label, title_name
 
 INK = colors.HexColor("#1f2937")
 MUTED = colors.HexColor("#6b7280")
@@ -39,6 +39,10 @@ def _styles() -> dict[str, ParagraphStyle]:
         "sub": ParagraphStyle(
             "sub", parent=base, fontSize=8.5, textColor=MUTED,
             alignment=TA_CENTER, leading=12,
+        ),
+        "trust": ParagraphStyle(
+            "trust", parent=base, fontName="Helvetica-Bold", fontSize=9,
+            textColor=INK, alignment=TA_CENTER, leading=13,
         ),
         "tagline": ParagraphStyle(
             "tagline", parent=base, fontName="Helvetica-Bold", fontSize=7.5,
@@ -92,6 +96,12 @@ def build_receipt_pdf(payment: dict[str, Any], ledger: dict[str, Any]) -> bytes:
 
     masthead = [
         Paragraph(settings.school_full_name, st["school"]),
+    ]
+    # The trust is the legal recipient of the money, so it belongs on the
+    # receipt directly under the school name.
+    if settings.school_trust:
+        masthead.append(Paragraph(f"A unit of {settings.school_trust}", st["trust"]))
+    masthead += [
         Paragraph(settings.school_tagline, st["tagline"]),
         Spacer(1, 3),
         Paragraph(settings.school_address, st["sub"]),
@@ -149,7 +159,7 @@ def build_receipt_pdf(payment: dict[str, Any], ledger: dict[str, Any]) -> bytes:
         _pair(st, "Receipt No.", payment.get("receipt_no", "")) + _pair(st, "Date", paid_on_txt),
         _pair(st, "Admission No.", payment.get("admission_no", ""))
         + _pair(st, "Academic Year", payment.get("academic_year", "")),
-        _pair(st, "Student Name", payment.get("student_name", ""))
+        _pair(st, "Student Name", title_name(payment.get("student_name", "")))
         + _pair(st, "Class", payment.get("classroom_name") or "-"),
         _pair(st, "Payment Mode", mode_txt)
         + _pair(st, "Reference", payment.get("reference") or "-"),

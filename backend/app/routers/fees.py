@@ -20,7 +20,15 @@ from ..services.payments import day_end as _day_end
 from ..services.payments import day_start as _day_start
 from ..services.payments import paid_total as _paid_total
 from ..services.receipt_pdf import build_receipt_pdf
-from ..utils import amount_in_words, money, now_utc, serialize, to_object_id
+from ..utils import (
+    amount_in_words,
+    money,
+    now_utc,
+    person_name,
+    serialize,
+    title_name,
+    to_object_id,
+)
 
 router = APIRouter(prefix="/api/fees", tags=["fees"], dependencies=[Depends(get_current_user)])
 
@@ -28,6 +36,7 @@ ManageOnly = Depends(require_roles("admin", "staff"))
 
 SCHOOL = {
     "name": settings.school_full_name,
+    "trust": settings.school_trust,
     "tagline": settings.school_tagline,
     "address": settings.school_address,
     "phone": settings.school_phone,
@@ -35,6 +44,18 @@ SCHOOL = {
     "website": settings.school_website,
     "currency": settings.currency_symbol,
 }
+
+
+def _public_payment(doc: dict | None) -> dict | None:
+    """Serialise a receipt, proper-casing the name copied onto it at the time.
+
+    Receipts written before names were normalised still hold whatever case was
+    typed at the desk, and a receipt is the one document a parent keeps.
+    """
+    out = serialize(doc)
+    if out and out.get("student_name"):
+        out["student_name"] = title_name(out["student_name"])
+    return out
 
 
 async def _student_or_404(db: AsyncDatabase, student_id: str) -> dict:
@@ -54,17 +75,17 @@ async def student_ledger(student_id: str, db: DbDep):
         await db.payments.find({"student_id": student_id}).sort("paid_on", -1).to_list(500)
     )
     paid = money(sum(p["amount"] for p in payments if not p.get("cancelled")))
-    summary = summarise(student.get("fee_plan"), paid)
+    override = student.get("next_due_override")
+    summary = summarise(student.get("fee_plan"), paid, override)
 
     return {
         "student_id": student_id,
-        "student_name": " ".join(
-            filter(None, [student.get("first_name"), student.get("last_name")])
-        ),
+        "next_due_override": override,
+        "student_name": person_name(student.get("first_name"), student.get("last_name")),
         "admission_no": student.get("admission_no", ""),
         "classroom_name": await _classroom_name(db, student.get("classroom_id")),
         **summary,
-        "payments": [serialize(p) for p in payments],
+        "payments": [_public_payment(p) for p in payments],
     }
 
 
@@ -86,6 +107,7 @@ async def collect_payment(payload: PaymentCreate, db: DbDep, user: CurrentUser):
         items=[i.model_dump() for i in payload.items] if payload.items else None,
         collected_by=user.get("name"),
         collected_by_id=user.get("id"),
+        next_due_date=payload.next_due_date,
     )
 
 
@@ -142,7 +164,7 @@ async def list_payments(
     totals = await agg.to_list(1)
 
     return {
-        "items": [serialize(d) for d in docs],
+        "items": [_public_payment(d) for d in docs],
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -159,7 +181,7 @@ async def _payment_or_404(db: AsyncDatabase, payment_id: str) -> dict:
 
 @router.get("/payments/{payment_id}", response_model=PaymentOut)
 async def get_payment(payment_id: str, db: DbDep):
-    return serialize(await _payment_or_404(db, payment_id))
+    return _public_payment(await _payment_or_404(db, payment_id))
 
 
 @router.post("/payments/{payment_id}/cancel", response_model=PaymentOut,
@@ -173,7 +195,7 @@ async def cancel_payment(payment_id: str, db: DbDep, reason: str = Query(min_len
         {"$set": {"cancelled": True, "cancel_reason": reason, "cancelled_at": now_utc()}},
         return_document=True,
     )
-    return serialize(updated)
+    return _public_payment(updated)
 
 
 async def _receipt_context(db: AsyncDatabase, payment_id: str) -> tuple[dict, dict]:
@@ -181,7 +203,7 @@ async def _receipt_context(db: AsyncDatabase, payment_id: str) -> tuple[dict, di
     student = await db.students.find_one({"_id": to_object_id(payment["student_id"])})
     plan = (student or {}).get("fee_plan") or {}
     paid = await _paid_total(db, payment["student_id"])
-    ledger = summarise(plan, paid)
+    ledger = summarise(plan, paid, (student or {}).get("next_due_override"))
     return payment, ledger
 
 
@@ -189,7 +211,7 @@ async def _receipt_context(db: AsyncDatabase, payment_id: str) -> tuple[dict, di
 async def receipt_details(payment_id: str, db: DbDep):
     payment, ledger = await _receipt_context(db, payment_id)
     return {
-        "payment": serialize(payment),
+        "payment": _public_payment(payment),
         "school": SCHOOL,
         "amount_in_words": amount_in_words(payment["amount"]),
         "total_paid": ledger["total_paid"],
@@ -239,7 +261,11 @@ async def outstanding_dues(
     rows: list[dict] = []
     for student in students:
         sid = str(student["_id"])
-        summary = summarise(student.get("fee_plan"), paid_map.get(sid, 0.0))
+        summary = summarise(
+            student.get("fee_plan"),
+            paid_map.get(sid, 0.0),
+            student.get("next_due_override"),
+        )
         if summary["balance"] <= 0.01:
             continue
         if only_overdue and summary["overdue_amount"] <= 0.01:
@@ -249,9 +275,7 @@ async def outstanding_dues(
             {
                 "student_id": sid,
                 "admission_no": student.get("admission_no", ""),
-                "student_name": " ".join(
-                    filter(None, [student.get("first_name"), student.get("last_name")])
-                ),
+                "student_name": person_name(student.get("first_name"), student.get("last_name")),
                 "classroom_name": class_names.get(student.get("classroom_id") or ""),
                 "guardian_phone": (student.get("guardian") or {}).get("primary_phone"),
                 "net_payable": summary["net_payable"],

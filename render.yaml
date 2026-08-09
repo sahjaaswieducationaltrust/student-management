@@ -49,6 +49,8 @@ services:
         value: Hello Kids Preschool
       - key: SCHOOL_BRANCH
         value: Bells
+      - key: SCHOOL_TRUST
+        value: Sahjaswi Educational Trust
       - key: SCHOOL_TAGLINE
         value: The Power of Early Childhood Education
       - key: SCHOOL_ADDRESS
@@ -69,6 +71,14 @@ services:
         value: "2026-27"
       - key: SESSION_START_MONTH
         value: "4"
+
+      # --- registers ---
+      # New admissions become HKB20260003, HKB20260004, ... Numbers already
+      # issued are not rewritten; see backend/scripts/renumber_admissions.py.
+      - key: ADMISSION_PREFIX
+        value: HKB
+      - key: EMPLOYEE_PREFIX
+        value: EMP
 
       # --- CORS ---
       # The UI is served from this same origin, so the browser never makes a

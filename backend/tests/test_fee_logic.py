@@ -118,6 +118,93 @@ check("PDF built", pdf[:4] == b"%PDF" and len(pdf) > 2000, f"{len(pdf)} bytes")
 cancelled_pdf = build_receipt_pdf({**payment, "cancelled": True, "cancel_reason": "Cheque bounced"}, summary)
 check("cancelled variant builds", cancelled_pdf[:4] == b"%PDF")
 
+print("\n[7b] Admin-entered next due date")
+# A schedule where the first instalment is long overdue and unpaid.
+override_plan = build_fee_plan(COMPONENTS, academic_year="2026-27")
+auto = summarise(override_plan, 0)
+check("without an override the schedule date is used",
+      auto["next_due"]["due_date"] == date(2026, 4, 1), str(auto["next_due"]["due_date"]))
+
+far_future = date(date.today().year + 5, 6, 1)
+moved = summarise(override_plan, 0, far_future)
+check("override moves the next instalment's due date",
+      moved["next_due"]["due_date"] == far_future, str(moved["next_due"]["due_date"]))
+check("a future override clears the overdue flag", moved["next_due"]["status"] == "due",
+      moved["next_due"]["status"])
+check("a future override drops that instalment out of the overdue total",
+      moved["overdue_amount"] < auto["overdue_amount"],
+      f"{moved['overdue_amount']} vs {auto['overdue_amount']}")
+
+long_past = date(date.today().year - 5, 6, 1)
+pushed_back = summarise(override_plan, 0, long_past)
+check("a past override marks the instalment overdue",
+      pushed_back["next_due"]["status"] == "overdue", pushed_back["next_due"]["status"])
+
+# Mongo hands dates back as datetimes; the override must accept both.
+as_datetime = summarise(override_plan, 0, datetime(far_future.year, 6, 1, tzinfo=timezone.utc))
+check("a datetime override is accepted like a date",
+      as_datetime["next_due"]["due_date"] == far_future, str(as_datetime["next_due"]["due_date"]))
+
+# Only the *next* unpaid instalment moves — later ones keep their own dates.
+check("later instalments keep the automatic schedule",
+      moved["installments"][1]["due_date"] == auto["installments"][1]["due_date"],
+      str(moved["installments"][1]["due_date"]))
+
+# A part-paid instalment keeps its "partial" status when moved forward.
+part_paid = summarise(override_plan, 100, far_future)
+check("a part-paid instalment moved forward reads as partial",
+      part_paid["next_due"]["status"] == "partial", part_paid["next_due"]["status"])
+
+print("\n[7c] Fee categories")
+from app.schemas import FEE_CATEGORY_LABELS, FeeCategory, is_free_category
+
+check("regular is not a free category", not is_free_category("regular"))
+check("staff ward is a free category", is_free_category("staff_ward"))
+check("blank category is not free", not is_free_category(None))
+check("every category has a label",
+      all(c.value in FEE_CATEGORY_LABELS for c in FeeCategory),
+      str(sorted(FEE_CATEGORY_LABELS)))
+
+free_plan = build_fee_plan(COMPONENTS, academic_year="2026-27", agreed_total=0.0,
+                           discount_reason="Staff ward — no fee")
+check("a waived plan is payable zero", free_plan["net_payable"] == 0, str(free_plan["net_payable"]))
+check("a waived plan records the full concession",
+      free_plan["discount"] == expected_gross, str(free_plan["discount"]))
+free_summary = summarise(free_plan, 0)
+check("a waived child has no balance", free_summary["balance"] == 0, str(free_summary["balance"]))
+check("a waived child is never overdue", free_summary["overdue_amount"] == 0,
+      str(free_summary["overdue_amount"]))
+check("a waived child has no next instalment", free_summary["next_due"] is None,
+      str(free_summary["next_due"]))
+
+print("\n[7d] Admission number prefix")
+from app.config import settings
+
+check("admission prefix is configurable and defaults to HKB",
+      settings.admission_prefix == "HKB", settings.admission_prefix)
+
+print("\n[7e] Name casing")
+from app.utils import person_name, title_name
+
+for raw, want in [
+    ("jaaswika govindu", "Jaaswika Govindu"),
+    ("JAASWIKA GOVINDU", "Jaaswika Govindu"),
+    ("  ravi   kumar  ", "Ravi   Kumar"),
+    ("k.r. d'souza", "K.R. D'Souza"),
+    ("anitha-priya", "Anitha-Priya"),
+    ("", ""),
+]:
+    got = title_name(raw)
+    check(f"title_name({raw!r})", got == want, f"got {got!r}, want {want!r}")
+
+check("title_name(None) is empty", title_name(None) == "")
+check("person_name joins and cases",
+      person_name("jaaswika", "govindu") == "Jaaswika Govindu",
+      person_name("jaaswika", "govindu"))
+check("person_name drops a missing surname",
+      person_name("aarav", None) == "Aarav", person_name("aarav", None))
+check("person_name with nothing is empty", person_name(None, None) == "")
+
 print("\n[8] FastAPI app / OpenAPI schema")
 from app.main import app
 schema = app.openapi()

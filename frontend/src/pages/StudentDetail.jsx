@@ -3,10 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import PaymentForm from '../components/PaymentForm'
 import StudentForm from '../components/StudentForm'
 import { useToast } from '../components/Toast'
-import { Card, Empty, Field, Loading, Modal, StatusBadge } from '../components/ui'
+import { Card, ChildAvatar, Empty, Field, Loading, Modal, StatusBadge } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import api, { errorMessage } from '../lib/api'
-import { formatDate, initials, modeLabel, money, titleCase } from '../lib/format'
+import { formatDate, modeLabel, money, titleCase } from '../lib/format'
 
 function FeePlanDialog({ student, ledger, onClose, onSaved }) {
   const toast = useToast()
@@ -161,12 +161,7 @@ export default function StudentDetail() {
     <div className="stack">
       <Card>
         <div className="row" style={{ gap: 16, flexWrap: 'nowrap', alignItems: 'flex-start' }}>
-          <div
-            className="avatar"
-            style={{ width: 60, height: 60, flex: '0 0 60px', fontSize: 21, background: 'var(--brand-soft)', color: 'var(--brand-dark)' }}
-          >
-            {initials(student.full_name)}
-          </div>
+          <ChildAvatar gender={student.gender} name={student.full_name} size={60} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="row" style={{ gap: 10 }}>
               <h1>{student.full_name}</h1>

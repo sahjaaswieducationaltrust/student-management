@@ -243,13 +243,49 @@ def auto_allocate_items(
     return items
 
 
-def summarise(fee_plan: dict[str, Any] | None, total_paid: float) -> dict[str, Any]:
+def _as_date(value: Any) -> date | None:
+    if hasattr(value, "date"):  # datetime coming back from Mongo
+        return value.date()
+    return value if isinstance(value, date) else None
+
+
+def apply_next_due_override(
+    rows: list[dict[str, Any]], override: Any, today: date | None = None
+) -> list[dict[str, Any]]:
+    """Move the next unpaid instalment to a date the admin agreed at the desk.
+
+    The date is not cosmetic: it decides whether the child counts as overdue,
+    so the row's status is recomputed from it. Rows that are already settled,
+    and later instalments, are left on the automatic schedule.
+    """
+    due_on = _as_date(override)
+    if due_on is None:
+        return rows
+
+    today = today or date.today()
+    for row in rows:
+        if row["balance"] <= 0.004:
+            continue
+        row["due_date"] = due_on
+        if due_on < today:
+            row["status"] = "overdue"
+        else:
+            row["status"] = "partial" if row["paid"] > 0 else "due"
+        break
+    return rows
+
+
+def summarise(
+    fee_plan: dict[str, Any] | None,
+    total_paid: float,
+    next_due_override: Any = None,
+) -> dict[str, Any]:
     """Ledger totals for a student."""
     plan = fee_plan or {}
     installments = plan.get("installments", [])
     net = money(plan.get("net_payable", 0))
     paid = money(total_paid)
-    rows = allocate(installments, paid)
+    rows = apply_next_due_override(allocate(installments, paid), next_due_override)
     next_due = next((r for r in rows if r["balance"] > 0), None)
 
     return {

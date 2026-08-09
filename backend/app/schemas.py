@@ -38,6 +38,39 @@ class StudentStatus(str, Enum):
     graduated = "graduated"
 
 
+class FeeCategory(str, Enum):
+    """Why a child pays what they pay.
+
+    Everything except ``regular`` is a full waiver: picking one zeroes the
+    payable fee, so these children never appear in the dues list. The category
+    is kept on the record so the trust can report on how many free seats each
+    kind of concession accounts for.
+    """
+
+    regular = "regular"
+    staff_ward = "staff_ward"
+    management_ward = "management_ward"
+    govt_quota = "govt_quota"
+    financial_aid = "financial_aid"
+
+
+FREE_FEE_CATEGORIES: frozenset[FeeCategory] = frozenset(
+    c for c in FeeCategory if c is not FeeCategory.regular
+)
+
+FEE_CATEGORY_LABELS: dict[str, str] = {
+    FeeCategory.regular.value: "Regular",
+    FeeCategory.staff_ward.value: "Staff ward",
+    FeeCategory.management_ward.value: "Management / Principal's ward",
+    FeeCategory.govt_quota.value: "Govt quota / RTE",
+    FeeCategory.financial_aid.value: "Financial aid",
+}
+
+
+def is_free_category(value: str | None) -> bool:
+    return bool(value) and value != FeeCategory.regular.value
+
+
 class AttendanceStatus(str, Enum):
     present = "present"
     absent = "absent"
@@ -163,6 +196,7 @@ class StudentBase(BaseModel):
     classroom_id: str | None = None
     admission_date: date | None = None
     status: StudentStatus = StudentStatus.active
+    fee_category: FeeCategory = FeeCategory.regular
     photo_url: str | None = None
     guardian: GuardianInfo
     medical: MedicalInfo = MedicalInfo()
@@ -206,6 +240,7 @@ class StudentUpdate(BaseModel):
     classroom_id: str | None = None
     admission_date: date | None = None
     status: StudentStatus | None = None
+    fee_category: FeeCategory | None = None
     photo_url: str | None = None
     guardian: GuardianInfo | None = None
     medical: MedicalInfo | None = None
@@ -247,6 +282,10 @@ class StudentOut(StudentBase):
     created_at: datetime | None = None
     fee_plan: FeePlanOut | None = None
     fee_summary: StudentFeeSummary | None = None
+    fee_category_label: str = FEE_CATEGORY_LABELS[FeeCategory.regular.value]
+    # Set by the admin while collecting an instalment; overrides the date the
+    # schedule would otherwise have computed.
+    next_due_override: date | None = None
 
 
 class StudentCreatedOut(StudentOut):
@@ -324,6 +363,8 @@ class FeePlanAssign(BaseModel):
     agreed_fee: float | None = Field(default=None, ge=0)
     discount: float = Field(default=0, ge=0)
     discount_reason: str | None = None
+    # A concession category wins over agreed_fee and zeroes the plan.
+    fee_category: FeeCategory | None = None
 
 
 class PaymentItem(BaseModel):
@@ -339,6 +380,9 @@ class PaymentCreate(BaseModel):
     reference: str | None = Field(default=None, max_length=80)
     remarks: str | None = Field(default=None, max_length=300)
     items: list[PaymentItem] | None = None  # defaults to auto-allocation
+    # When the desk agrees a date for the next instalment, it is recorded here
+    # and replaces the auto-computed one. Omit to keep the automatic schedule.
+    next_due_date: date | None = None
 
 
 class PaymentOut(BaseModel):
@@ -388,6 +432,7 @@ class LedgerResponse(BaseModel):
     total_paid: float = 0
     balance: float = 0
     next_due: InstallmentStatus | None = None
+    next_due_override: date | None = None
     installments: list[InstallmentStatus] = []
     payments: list[PaymentOut] = []
 
@@ -420,6 +465,7 @@ class AttendanceOut(BaseModel):
     id: str | None = None
     student_id: str
     student_name: str
+    gender: Literal["male", "female", "other"] | None = None
     admission_no: str
     classroom_id: str | None = None
     date: date
