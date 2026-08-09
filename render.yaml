@@ -1,0 +1,78 @@
+# Render Blueprint — one free web service running the whole product.
+#
+# The Dockerfile builds the React app and hands it to FastAPI, so this single
+# service serves the UI, the API and the docs on one HTTPS URL. MongoDB stays
+# on Atlas; nothing is stored on the container's disk.
+#
+# Values marked `sync: false` are NOT stored in this repo — Render prompts for
+# them when the blueprint is first applied, and they live only in the service's
+# Environment tab. See DEPLOY.md for the walkthrough.
+
+services:
+  - type: web
+    name: hellokids-school-management
+    runtime: docker
+    plan: free
+    region: singapore # closest Render region to Bengaluru
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+
+    envVars:
+      # --- secrets: set these in the Render dashboard, never here ---
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        # Generated once by Render and then held stable. Rotating it logs
+        # everyone out, so leave it alone after the first deploy.
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      # --- database ---
+      - key: MONGODB_DB
+        value: preschool
+
+      # --- auth ---
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "720"
+
+      # --- bootstrap admin (only used if the users collection is empty) ---
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_NAME
+        sync: false
+
+      # --- school profile: printed on every fee receipt ---
+      - key: SCHOOL_NAME
+        value: Hello Kids Preschool
+      - key: SCHOOL_BRANCH
+        value: Bells
+      - key: SCHOOL_TAGLINE
+        value: The Power of Early Childhood Education
+      - key: SCHOOL_ADDRESS
+        sync: false
+      - key: SCHOOL_PHONE
+        sync: false
+      - key: SCHOOL_EMAIL
+        sync: false
+      - key: SCHOOL_WEBSITE
+        value: www.hellokids.co.in
+      - key: SCHOOL_LOGO
+        value: hellokids-logo.png
+      - key: CURRENCY_SYMBOL
+        value: "₹"
+
+      # --- academics ---
+      - key: ACADEMIC_YEAR
+        value: "2026-27"
+      - key: SESSION_START_MONTH
+        value: "4"
+
+      # --- CORS ---
+      # The UI is served from this same origin, so the browser never makes a
+      # cross-origin call in production. These entries only matter when you run
+      # the Vite dev server locally against the deployed API.
+      - key: CORS_ORIGINS
+        value: http://localhost:5173,http://127.0.0.1:5173

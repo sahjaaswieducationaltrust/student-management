@@ -11,10 +11,14 @@ name: Build and deploy to Azure
 #
 # Secrets such as MONGODB_URI and JWT_SECRET are NEVER in this repo — they live
 # in the App Service's Environment variables / Application settings.
+#
+# NOTE: the live deployment currently runs on Render (see DEPLOY.md), so this
+# workflow is manual-only. Without an App Service and the publish-profile
+# secret it fails at the last step, and firing it on every push to main would
+# mark every commit red for no reason. Re-add the `push` trigger if you move
+# back to Azure.
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 env:
