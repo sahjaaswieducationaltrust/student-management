@@ -7,6 +7,7 @@ import Classes from './pages/Classes'
 import Dashboard from './pages/Dashboard'
 import Fees from './pages/Fees'
 import Login from './pages/Login'
+import Messages from './pages/Messages'
 import ReceiptView from './pages/ReceiptView'
 import Receipts from './pages/Receipts'
 import Reports from './pages/Reports'
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="receipts" element={<Receipts />} />
         <Route path="receipts/:id" element={<ReceiptView />} />
         <Route path="attendance" element={<Attendance />} />
+        <Route path="messages" element={<Messages />} />
         <Route path="reports" element={<Reports />} />
         <Route
           path="users"

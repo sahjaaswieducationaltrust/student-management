@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     admission_prefix: str = "HKB"
     employee_prefix: str = "EMP"
 
+    # --- parent messaging ---
+    # Dialling code prefixed to guardians' numbers when building WhatsApp
+    # click-to-chat links. Numbers are stored as typed, without it.
+    phone_country_code: str = "91"
+
     # --- misc ---
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 

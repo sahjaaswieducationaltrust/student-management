@@ -9,7 +9,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import close_mongo_connection, connect_to_mongo, get_db
-from .routers import attendance, auth, classrooms, dashboard, fees, students, teachers
+from .routers import (
+    attendance,
+    auth,
+    classrooms,
+    dashboard,
+    fees,
+    messages,
+    students,
+    teachers,
+)
 from .security import hash_password
 from .utils import now_utc
 
@@ -70,6 +79,7 @@ app.include_router(students.router)
 app.include_router(teachers.router)
 app.include_router(fees.router)
 app.include_router(attendance.router)
+app.include_router(messages.router)
 
 
 @app.get("/api/health", tags=["health"])

@@ -87,6 +87,38 @@ def encode_dates(value: Any) -> Any:
     return value
 
 
+def normalise_phone(value: str | None, country_code: str = "91") -> str | None:
+    """Return a WhatsApp-dialable number, or None when it cannot be one.
+
+    Parents' numbers arrive typed by hand: with spaces, with +91, with a
+    trunk 0, or as a placeholder somebody used to get past a required field.
+    Returning None for anything that is not a real Indian mobile is the point
+    — a broadcast that silently skips a family is worse than one that says
+    which numbers it could not use.
+    """
+    if not value:
+        return None
+
+    digits = re.sub(r"\D", "", str(value))
+    if not digits:
+        return None
+
+    # Trunk prefix used when dialling domestically: 0 98765 43210, and the
+    # 0-then-country-code form some phones store. No Indian mobile starts with
+    # a zero, so stripping them all is safe.
+    digits = digits.lstrip("0")
+    # Already carries the country code.
+    if digits.startswith(country_code) and len(digits) == len(country_code) + 10:
+        digits = digits[len(country_code):]
+
+    if len(digits) != 10:
+        return None
+    # Indian mobile numbers start 6-9. This is what rejects 1234567890.
+    if country_code == "91" and digits[0] not in "6789":
+        return None
+    return f"{country_code}{digits}"
+
+
 PAYMENT_MODE_LABELS = {
     "cash": "Cash",
     "upi": "UPI",

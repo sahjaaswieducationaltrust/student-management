@@ -282,6 +282,49 @@ finally:
         importlib.reload(_cfg)
         importlib.reload(_rp)
 
+print("\n[7h] Parent messaging")
+from app.services.messaging import TEMPLATES, render, unfilled_blanks
+from app.utils import normalise_phone
+
+for raw, want in [
+    ("9035103449", "919035103449"),
+    ("  7013015829  ", "917013015829"),
+    ("+91 90351 03449", "919035103449"),
+    ("919035103449", "919035103449"),
+    ("09035103449", "919035103449"),
+    ("091-9035103449", "919035103449"),
+    ("1234567890", None),   # the placeholder sitting in the live data
+    ("5035103449", None),   # Indian mobiles start 6-9
+    ("12345", None),
+    ("", None),
+    (None, None),
+]:
+    got = normalise_phone(raw)
+    check(f"normalise_phone({raw!r})", got == want, f"got {got!r}, want {want!r}")
+
+check("every template has a key, label and body",
+      all(t.get("key") and t.get("label") and t.get("body") for t in TEMPLATES),
+      f"{len(TEMPLATES)} templates")
+
+_family = {
+    "child_name": "Sahasrika Govindu", "guardian_name": "Govindu Naresh",
+    "classroom_name": "UKG", "admission_no": "HKB20260003",
+}
+_rendered = render("Dear Parent of {child} ({admission_no}) in {class} — {school}", _family)
+check("placeholders are filled per family",
+      "Sahasrika Govindu" in _rendered and "HKB20260003" in _rendered and "UKG" in _rendered,
+      _rendered)
+check("no placeholder braces survive rendering", "{" not in _rendered, _rendered)
+
+_holiday = next(t for t in TEMPLATES if t["key"] == "holiday")["body"]
+check("angle-bracket prompts are left for the writer to fill",
+      unfilled_blanks(_holiday) == ["<date>", "<occasion>"],
+      str(unfilled_blanks(_holiday)))
+check("a fully written message reports no blanks",
+      unfilled_blanks("School is closed on 15 August.") == [])
+check("rendering keeps the prompts visible",
+      "<date>" in render(_holiday, _family))
+
 print("\n[8] FastAPI app / OpenAPI schema")
 from app.main import app
 schema = app.openapi()

@@ -26,7 +26,10 @@ const NAV = [
   },
   {
     group: 'Daily',
-    items: [{ to: '/attendance', label: 'Attendance', icon: '📋' }],
+    items: [
+      { to: '/attendance', label: 'Attendance', icon: '📋' },
+      { to: '/messages', label: 'Message Parents', icon: '💬' },
+    ],
   },
   {
     group: 'Admin',
@@ -44,6 +47,7 @@ const TITLES = {
   '/receipts': 'Fee Receipts',
   '/reports': 'Reports',
   '/attendance': 'Daily Attendance',
+  '/messages': 'Message Parents',
   '/users': 'User Accounts',
 }
 

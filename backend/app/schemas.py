@@ -466,6 +466,61 @@ class AttendanceBulkCreate(BaseModel):
     entries: list[AttendanceEntry]
 
 
+# --------------------------------------------------------------------------- #
+# Parent messaging
+# --------------------------------------------------------------------------- #
+class MessageTemplate(BaseModel):
+    key: str
+    label: str
+    body: str
+
+
+class MessageRecipient(BaseModel):
+    student_id: str
+    child_name: str
+    admission_no: str
+    classroom_name: str | None = None
+    guardian_name: str | None = None
+    phone: str | None = None  # as typed on the record
+    whatsapp: str | None = None  # dialable form, None when unusable
+    balance: float = 0
+    message: str = ""  # the template rendered for this family
+
+
+class RecipientsResponse(BaseModel):
+    recipients: list[MessageRecipient]
+    total: int
+    reachable: int
+    unreachable: int
+    blanks: list[str] = []  # <date>-style prompts still to be filled in
+
+
+class BroadcastRecipientLog(BaseModel):
+    student_id: str
+    child_name: str
+    whatsapp: str | None = None
+    sent: bool = False
+
+
+class BroadcastCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    body: str = Field(min_length=1, max_length=2000)
+    channel: Literal["whatsapp", "sms", "other"] = "whatsapp"
+    recipients: list[BroadcastRecipientLog] = []
+
+
+class BroadcastOut(BaseModel):
+    id: str
+    title: str
+    body: str
+    channel: str
+    recipients: list[BroadcastRecipientLog] = []
+    total: int = 0
+    sent_count: int = 0
+    created_by: str | None = None
+    created_at: datetime | None = None
+
+
 class AttendanceOut(BaseModel):
     id: str | None = None
     student_id: str
