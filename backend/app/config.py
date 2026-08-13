@@ -100,9 +100,49 @@ class Settings(BaseSettings):
     employee_prefix: str = "EMP"
 
     # --- parent messaging ---
-    # Dialling code prefixed to guardians' numbers when building WhatsApp
-    # click-to-chat links. Numbers are stored as typed, without it.
+    # Dialling code prefixed to guardians' numbers. Numbers are stored as
+    # typed, without it.
     phone_country_code: str = "91"
+
+    # Automated sending is OFF until it is switched on deliberately. Every
+    # message costs money and lands on a real parent's phone, so an
+    # unconfigured or half-configured deployment must never send: with this
+    # false the app falls back to click-to-chat links.
+    messaging_enabled: bool = False
+    # Even when enabled, this keeps the app from calling the provider: it logs
+    # exactly what it would have sent instead. Leave true until you have seen
+    # a dry run you are happy with.
+    messaging_dry_run: bool = True
+
+    # MSG91 carries both channels on one account.
+    msg91_auth_key: str = ""
+    # The WhatsApp number registered with Meta through MSG91, digits only.
+    msg91_whatsapp_number: str = ""
+    # Approved sender header for SMS, e.g. "HKBELL". Registered on the DLT
+    # portal against the trust.
+    msg91_sms_sender_id: str = ""
+    # MSG91 "flow" id for the DLT-approved SMS template.
+    msg91_sms_flow_id: str = ""
+    msg91_base_url: str = "https://control.msg91.com/api"
+    # Name of the Meta-approved WhatsApp template the announcements go out in.
+    # Approve one shaped "Dear Parent of {{1}}, {{2}}" so the notice text can be
+    # written freely in the app and travel as the second variable — approving a
+    # separate template per notice type would mean a new Meta review every time
+    # the school wants to say something new.
+    msg91_whatsapp_template: str = "school_announcement"
+
+    # WhatsApp utility templates are cheaper than SMS in India and carry more
+    # text, so they are tried first; SMS is the fallback when WhatsApp fails
+    # or the parent is not on WhatsApp.
+    messaging_sms_fallback: bool = True
+
+    @property
+    def whatsapp_ready(self) -> bool:
+        return bool(self.msg91_auth_key and self.msg91_whatsapp_number)
+
+    @property
+    def sms_ready(self) -> bool:
+        return bool(self.msg91_auth_key and self.msg91_sms_sender_id and self.msg91_sms_flow_id)
 
     # --- misc ---
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

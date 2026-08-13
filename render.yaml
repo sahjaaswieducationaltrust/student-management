@@ -80,6 +80,27 @@ services:
       - key: EMPLOYEE_PREFIX
         value: EMP
 
+      # --- messaging parents ---
+      # Off until MSG91, DLT registration and the approved templates are in
+      # place; the app falls back to WhatsApp click-to-chat. See DEPLOY.md.
+      - key: MESSAGING_ENABLED
+        value: "false"
+      - key: MESSAGING_DRY_RUN
+        value: "true"
+      - key: PHONE_COUNTRY_CODE
+        value: "91"
+      - key: MSG91_WHATSAPP_TEMPLATE
+        value: school_announcement
+      # Credentials are prompted for, never committed.
+      - key: MSG91_AUTH_KEY
+        sync: false
+      - key: MSG91_WHATSAPP_NUMBER
+        sync: false
+      - key: MSG91_SMS_SENDER_ID
+        sync: false
+      - key: MSG91_SMS_FLOW_ID
+        sync: false
+
       # --- CORS ---
       # The UI is served from this same origin, so the browser never makes a
       # cross-origin call in production. These entries only matter when you run

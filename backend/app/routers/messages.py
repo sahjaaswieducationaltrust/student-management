@@ -13,11 +13,14 @@ from ..schemas import (
     BroadcastCreate,
     BroadcastOut,
     MessageTemplate,
+    MessagingStatus,
     RecipientsResponse,
+    SendRequest,
 )
 from ..services.fees import summarise
-from ..services.messaging import TEMPLATES, render, unfilled_blanks
+from ..services.messaging import TEMPLATES, render, to_variables, unfilled_blanks
 from ..services.payments import paid_totals
+from ..services.senders import channel_availability, send_many
 from ..utils import normalise_phone, now_utc, person_name, serialize, to_object_id
 
 router = APIRouter(
@@ -32,6 +35,90 @@ async def list_templates():
     return TEMPLATES
 
 
+@router.get("/status", response_model=MessagingStatus)
+async def messaging_status():
+    """Whether this deployment can send by itself, so the UI stops guessing."""
+    return {
+        **channel_availability(),
+        "whatsapp_template": settings.msg91_whatsapp_template or None,
+    }
+
+
+@router.post("/send", response_model=BroadcastOut, dependencies=[ManageOnly])
+async def send_now(payload: SendRequest, db: DbDep, user: CurrentUser):
+    """Send an announcement to every matching family, and record the outcome.
+
+    Refuses rather than half-works: an unfilled <date> would go out verbatim to
+    every parent, and a deployment with no provider configured would report
+    success for messages nobody received.
+    """
+    blanks = unfilled_blanks(payload.body)
+    if blanks:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fill in {', '.join(blanks)} before sending — it would go out as written.",
+        )
+
+    availability = channel_availability()
+    if not availability["enabled"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Automated sending is switched off. Set MESSAGING_ENABLED=true once the "
+                   "MSG91 account, DLT registration and approved templates are in place.",
+        )
+    if not (availability["whatsapp_ready"] or availability["sms_ready"]):
+        raise HTTPException(
+            status_code=409,
+            detail="No channel is configured. Add the MSG91 credentials for WhatsApp or SMS.",
+        )
+
+    prepared = await _recipient_rows(db, payload.body, payload.classroom_id, payload.dues_only)
+    reachable = [r for r in prepared if r["whatsapp"]]
+    if not reachable:
+        raise HTTPException(
+            status_code=400,
+            detail="No family in this selection has a usable phone number.",
+        )
+
+    template = payload.whatsapp_template or settings.msg91_whatsapp_template
+    for row in reachable:
+        row["variables"] = to_variables(row["message"], row)
+
+    outcomes = {o["student_id"]: o for o in await send_many(reachable, template)}
+
+    recipients = []
+    for row in prepared:
+        outcome = outcomes.get(row["student_id"])
+        if outcome is None:
+            recipients.append({
+                "student_id": row["student_id"], "child_name": row["child_name"],
+                "whatsapp": None, "sent": False, "status": "skipped",
+                "detail": "No usable phone number", "dry_run": False,
+            })
+            continue
+        recipients.append({
+            "student_id": row["student_id"], "child_name": row["child_name"],
+            "whatsapp": row["whatsapp"], "sent": bool(outcome["ok"]),
+            "status": "sent" if outcome["ok"] else "failed",
+            "channel": outcome["channel"], "detail": outcome["detail"],
+            "provider_id": outcome["provider_id"], "dry_run": outcome["dry_run"],
+        })
+
+    doc = {
+        "title": payload.title.strip(),
+        "body": payload.body,
+        "channel": "auto",
+        "whatsapp_template": template,
+        "recipients": recipients,
+        "created_by": user.get("name"),
+        "created_by_id": user.get("id"),
+        "created_at": now_utc(),
+    }
+    result = await db.broadcasts.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return _shape(doc)
+
+
 @router.get("/recipients", response_model=RecipientsResponse)
 async def recipients(
     db: DbDep,
@@ -40,6 +127,21 @@ async def recipients(
     dues_only: bool = False,
 ):
     """Guardians to contact, each with the message already filled in for them."""
+    rows = await _recipient_rows(db, body, classroom_id, dues_only)
+    reachable = sum(1 for r in rows if r["whatsapp"])
+    return {
+        "recipients": rows,
+        "total": len(rows),
+        "reachable": reachable,
+        "unreachable": len(rows) - reachable,
+        "blanks": unfilled_blanks(body) if body else [],
+    }
+
+
+async def _recipient_rows(
+    db, body: str, classroom_id: str | None, dues_only: bool
+) -> list[dict]:
+    """The families to contact. Shared so previewing and sending cannot diverge."""
     query: dict = {"status": "active"}
     if classroom_id:
         query["classroom_id"] = classroom_id
@@ -88,14 +190,7 @@ async def recipients(
         row["message"] = render(body, row) if body else ""
         rows.append(row)
 
-    reachable = sum(1 for r in rows if r["whatsapp"])
-    return {
-        "recipients": rows,
-        "total": len(rows),
-        "reachable": reachable,
-        "unreachable": len(rows) - reachable,
-        "blanks": unfilled_blanks(body) if body else [],
-    }
+    return rows
 
 
 @router.post("/broadcasts", response_model=BroadcastOut,

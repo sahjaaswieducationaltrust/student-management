@@ -325,6 +325,106 @@ check("a fully written message reports no blanks",
 check("rendering keeps the prompts visible",
       "<date>" in render(_holiday, _family))
 
+print("\n[7i] Automated sending — routing and fail-closed behaviour")
+import asyncio as _asyncio
+
+import app.config as _cfg
+import app.services.senders as _snd
+from app.services.messaging import to_variables
+
+_saved = {k: getattr(_cfg.settings, k) for k in (
+    "messaging_enabled", "messaging_dry_run", "msg91_auth_key", "msg91_whatsapp_number",
+    "msg91_sms_sender_id", "msg91_sms_flow_id", "messaging_sms_fallback",
+)}
+
+
+def _set(**kw):
+    for k, v in kw.items():
+        setattr(_cfg.settings, k, v)
+
+
+try:
+    # Nothing may leave the building unless it is switched on deliberately.
+    _set(messaging_enabled=False, messaging_dry_run=True)
+    _off = _asyncio.run(_snd.send_to_one(None, phone="919035103449", variables=["a"],
+                                         whatsapp_template="t"))
+    check("switched off refuses to send", not _off.ok and _off.channel == "none", _off.detail)
+    check("switched off leaves click-to-chat as the route",
+          _snd.channel_availability()["click_to_chat"])
+
+    _set(messaging_enabled=True, messaging_dry_run=True)
+    _dry = _asyncio.run(_snd.send_to_one(None, phone="919035103449", variables=["a"],
+                                         whatsapp_template="t"))
+    check("dry run reports success without sending", _dry.ok and _dry.dry_run, _dry.detail)
+
+    # Enabled and live but unconfigured must fail, never claim success.
+    _set(messaging_dry_run=False, msg91_auth_key="", msg91_whatsapp_number="",
+         msg91_sms_sender_id="", msg91_sms_flow_id="")
+    _unconf = _asyncio.run(_snd.send_to_one(object(), phone="919035103449", variables=["a"],
+                                            whatsapp_template="t"))
+    check("live but unconfigured fails rather than claiming success",
+          not _unconf.ok, _unconf.detail)
+
+    _set(messaging_dry_run=True)
+    _nophone = _asyncio.run(_snd.send_to_one(None, phone="", variables=[], whatsapp_template="t"))
+    check("a family with no usable number is not reported as sent", not _nophone.ok,
+          _nophone.detail)
+
+    # WhatsApp first, SMS only to rescue what WhatsApp could not deliver.
+    _set(messaging_enabled=True, messaging_dry_run=False, msg91_auth_key="k",
+         msg91_whatsapp_number="9199", msg91_sms_sender_id="HKBELL",
+         msg91_sms_flow_id="flow1", messaging_sms_fallback=True)
+    _real_post = _snd._post
+    _state = {"wa": True, "sms": True}
+    _tried: list[str] = []
+
+    async def _fake_post(client, path, payload):
+        _tried.append("whatsapp" if "whatsapp" in path else "sms")
+        ok = _state["wa"] if "whatsapp" in path else _state["sms"]
+        return ok, "stub", "id-1"
+
+    _snd._post = _fake_post
+    try:
+        _tried.clear(); _state.update(wa=True, sms=True)
+        r = _asyncio.run(_snd.send_to_one(object(), phone="9190", variables=["a"],
+                                          whatsapp_template="t"))
+        check("whatsapp is tried first and sms is not touched",
+              r.ok and r.channel == "whatsapp" and _tried == ["whatsapp"], str(_tried))
+
+        _tried.clear(); _state.update(wa=False, sms=True)
+        r = _asyncio.run(_snd.send_to_one(object(), phone="9190", variables=["a"],
+                                          whatsapp_template="t"))
+        check("sms rescues a failed whatsapp",
+              r.ok and r.channel == "sms" and _tried == ["whatsapp", "sms"], str(_tried))
+
+        _tried.clear(); _state.update(wa=False, sms=False)
+        r = _asyncio.run(_snd.send_to_one(object(), phone="9190", variables=["a"],
+                                          whatsapp_template="t"))
+        check("both channels failing is reported as a failure", not r.ok, r.detail)
+
+        _tried.clear(); _state.update(wa=False, sms=True)
+        _set(messaging_sms_fallback=False)
+        r = _asyncio.run(_snd.send_to_one(object(), phone="9190", variables=["a"],
+                                          whatsapp_template="t"))
+        check("fallback off means sms is never charged for",
+              not r.ok and _tried == ["whatsapp"], str(_tried))
+    finally:
+        _snd._post = _real_post
+finally:
+    _set(**_saved)
+
+# The approved template supplies the greeting and sign-off, so they must not be
+# sent again inside the variable.
+_vars = to_variables(
+    "Dear Parent of Sahasrika Govindu,\n\nSchool is closed on 15 August.\n\n"
+    "Thank you,\nHello Kids Preschool — Bells",
+    {"child_name": "Sahasrika Govindu"},
+)
+check("first variable is the child", _vars[0] == "Sahasrika Govindu", _vars[0])
+check("the notice text is the second variable",
+      _vars[1] == "School is closed on 15 August.", repr(_vars[1]))
+check("the greeting is not repeated inside the variable", "Dear Parent" not in _vars[1])
+
 print("\n[8] FastAPI app / OpenAPI schema")
 from app.main import app
 schema = app.openapi()

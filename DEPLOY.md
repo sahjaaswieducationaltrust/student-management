@@ -108,6 +108,89 @@ rather than any data — but if you would rather it were closed, pass
   will vanish on every redeploy. Use Atlas GridFS or an object store for those.
 - **750 instance-hours/month** across all free services. One service is fine.
 
+## Messaging parents automatically (MSG91)
+
+Out of the box the Message Parents page runs in **manual mode**: it prepares the
+message per family and opens your own WhatsApp, which costs nothing and needs no
+approval. Automated sending is off until every item below is done, and the app
+falls back to manual rather than pretending it can send.
+
+None of this can be done from code — it needs the trust's documents and a funded
+account.
+
+### 1. What you must obtain
+
+| Step | Where | Roughly |
+| --- | --- | --- |
+| MSG91 account + credit | [msg91.com](https://msg91.com) | same day |
+| DLT registration for the trust | MSG91 guides it; portal is Jio/Airtel/VI | 3–10 days |
+| SMS header (sender ID), e.g. `HKBELL` | DLT portal | 1–3 days |
+| SMS content template approved | DLT portal | 1–3 days |
+| WhatsApp Business Account + Meta verification | via MSG91 | 3–10 days |
+| A phone number **not already on WhatsApp** | your own | — |
+| WhatsApp message template approved | Meta, via MSG91 | hours–2 days |
+
+Keep the trust's registration certificate, PAN and an address proof to hand —
+Meta verification asks for them.
+
+### 2. The WhatsApp template to ask for
+
+Approve **one** template under the **Utility** category, shaped so the notice
+text is a variable:
+
+```
+Dear Parent of {{1}},
+
+{{2}}
+
+— Hello Kids Preschool, Bells
+```
+
+This matters: approve a template per notice type and every new announcement
+needs a fresh Meta review. With the text as `{{2}}` the school can write freely
+and still send within an approved template. Register the DLT SMS template with
+the same two variables so the fallback carries the same words.
+
+Utility is also the cheap category — roughly ₹0.10–0.15 a message against
+₹0.15–0.25 for SMS. Event invitations are sometimes reclassified as Marketing,
+which costs several times more; if that happens, word the notice as a service
+update rather than a promotion.
+
+### 3. Render environment variables
+
+```
+MSG91_AUTH_KEY          = <from MSG91 dashboard>
+MSG91_WHATSAPP_NUMBER   = 917760022267      # digits only, the WABA number
+MSG91_SMS_SENDER_ID     = HKBELL            # your approved header
+MSG91_SMS_FLOW_ID       = <DLT flow id>
+MSG91_WHATSAPP_TEMPLATE = school_announcement
+MESSAGING_ENABLED       = true
+MESSAGING_DRY_RUN       = true              # leave true for the first run
+```
+
+### 4. Switch it on carefully
+
+Sending costs money and reaches real parents, so it fails closed and takes two
+deliberate steps to go live.
+
+1. With `MESSAGING_DRY_RUN=true`, press **Send to all**. The delivery report
+   fills in and the history records a full round, but nothing leaves the
+   building. Check the recipient list and the wording.
+2. Set `MESSAGING_DRY_RUN=false`. Send to **one** family first — filter to a
+   single class, or temporarily mark the others inactive.
+3. Only then send to everyone.
+
+If a message fails, the report shows the provider's own words against that
+child: an unapproved template and an unregistered header both say so plainly.
+
+### 5. What still will not be automatic
+
+Scheduled sends ("go out at 8am tomorrow") need something running at 8am. On
+Render's free tier the instance sleeps after 15 minutes, so nothing fires.
+Sending from the page works fine — you are signed in, so the instance is awake.
+For scheduling, either move to the Starter plan or have a GitHub Actions cron
+call the API, which wakes the instance on the way in.
+
 ## Rolling back
 
 Render → the service → **Events** → pick an earlier deploy → **Rollback**.

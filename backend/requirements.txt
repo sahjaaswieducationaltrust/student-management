@@ -9,6 +9,7 @@ bcrypt>=4.3.0
 python-multipart>=0.0.20
 reportlab>=4.4.4
 email-validator>=2.3.0
+httpx>=0.28.1   # calls the MSG91 messaging API
 
 # Production WSGI/ASGI runner used by Azure App Service (Linux only —
 # gunicorn cannot run on Windows, so it is skipped for local dev).

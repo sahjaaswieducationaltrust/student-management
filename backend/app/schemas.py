@@ -500,6 +500,12 @@ class BroadcastRecipientLog(BaseModel):
     child_name: str
     whatsapp: str | None = None
     sent: bool = False
+    # Filled by automated sending; click-to-chat only ever sets `sent`.
+    status: Literal["pending", "sent", "failed", "skipped"] = "pending"
+    channel: str | None = None  # which channel actually carried it
+    detail: str | None = None  # provider's words when it failed
+    provider_id: str | None = None
+    dry_run: bool = False
 
 
 class BroadcastCreate(BaseModel):
@@ -507,6 +513,30 @@ class BroadcastCreate(BaseModel):
     body: str = Field(min_length=1, max_length=2000)
     channel: Literal["whatsapp", "sms", "other"] = "whatsapp"
     recipients: list[BroadcastRecipientLog] = []
+
+
+class MessagingStatus(BaseModel):
+    """What this deployment can do — the UI adapts to it rather than guessing."""
+
+    enabled: bool = False
+    dry_run: bool = True
+    whatsapp_ready: bool = False
+    sms_ready: bool = False
+    sms_fallback: bool = True
+    click_to_chat: bool = True
+    whatsapp_template: str | None = None
+
+
+class SendRequest(BaseModel):
+    """Send an announcement to everyone matching the filters, in one go."""
+
+    title: str = Field(min_length=1, max_length=120)
+    body: str = Field(min_length=1, max_length=2000)
+    classroom_id: str | None = None
+    dues_only: bool = False
+    # Overrides the configured approved template, when a notice needs a
+    # different one that Meta has cleared.
+    whatsapp_template: str | None = Field(default=None, max_length=120)
 
 
 class BroadcastOut(BaseModel):

@@ -31,6 +31,11 @@ export default function Messages() {
   const [broadcastId, setBroadcastId] = useState(null)
   const [sent, setSent] = useState({})
   const [history, setHistory] = useState([])
+  // What this deployment can do. Until MSG91 is configured the page falls back
+  // to click-to-chat rather than offering a button that cannot work.
+  const [status, setStatus] = useState(null)
+  const [sending, setSending] = useState(false)
+  const [result, setResult] = useState(null)
 
   useEffect(() => {
     api.get('/api/messages/templates').then(({ data: res }) => {
@@ -42,7 +47,10 @@ export default function Messages() {
       }
     }).catch((err) => toast.error(errorMessage(err)))
     api.get('/api/classrooms').then(({ data: res }) => setClassrooms(res)).catch(() => {})
+    api.get('/api/messages/status').then(({ data: res }) => setStatus(res)).catch(() => {})
   }, [toast])
+
+  const automated = !!status && status.enabled && (status.whatsapp_ready || status.sms_ready)
 
   const loadHistory = useCallback(async () => {
     try {
@@ -141,6 +149,31 @@ export default function Messages() {
     }
   }
 
+  const sendToEveryone = async () => {
+    setSending(true)
+    setResult(null)
+    try {
+      const { data: broadcast } = await api.post('/api/messages/send', {
+        title: title.trim() || 'Announcement',
+        body,
+        classroom_id: classFilter || undefined,
+        dues_only: duesOnly,
+      })
+      setResult(broadcast)
+      const failed = broadcast.total - broadcast.sent_count
+      if (failed > 0) {
+        toast.error(`${broadcast.sent_count} sent, ${failed} did not go through`)
+      } else {
+        toast.success(`Sent to ${broadcast.sent_count} parent(s)`)
+      }
+      loadHistory()
+    } catch (err) {
+      toast.error(errorMessage(err))
+    } finally {
+      setSending(false)
+    }
+  }
+
   const copy = async (text, label) => {
     try {
       await navigator.clipboard.writeText(text)
@@ -156,11 +189,29 @@ export default function Messages() {
         title="Message parents"
         subtitle="Holidays, events and reminders over WhatsApp"
       >
-        <div className="alert info">
-          Messages are sent from <b>your own WhatsApp</b>, one family at a time — nothing is
-          sent automatically by the system, and it costs nothing. Each family you open is
-          ticked off below so you can see where you stopped.
-        </div>
+        {!automated ? (
+          <div className="alert info">
+            <b>Manual mode.</b> Messages go from <b>your own WhatsApp</b>, one family at a
+            time, at no cost. Automated sending needs an MSG91 account with DLT registration
+            and Meta-approved templates — see DEPLOY.md. Until then each family you open is
+            ticked off below so you can see where you stopped.
+          </div>
+        ) : status.dry_run ? (
+          <div className="alert error">
+            <b>Dry run is on.</b> Pressing send will record a full round and report success
+            without any message leaving the building. Set <code>MESSAGING_DRY_RUN=false</code>{' '}
+            in Render once you are happy with what it reports.
+          </div>
+        ) : (
+          <div className="alert success">
+            <b>Automated sending is live.</b> Messages go out over{' '}
+            {status.whatsapp_ready ? 'WhatsApp' : 'SMS'}
+            {status.whatsapp_ready && status.sms_ready && status.sms_fallback
+              ? ', falling back to SMS for parents it cannot reach'
+              : ''}
+            . Each message costs money — check the recipient list before sending.
+          </div>
+        )}
 
         <div className="form-grid" style={{ marginTop: 14 }}>
           <div className="field">
@@ -243,6 +294,52 @@ export default function Messages() {
         )}
       </Card>
 
+      {result && (
+        <Card
+          title="Delivery report"
+          subtitle={`${result.sent_count} of ${result.total} delivered${
+            result.recipients.some((r) => r.dry_run) ? ' — dry run, nothing actually sent' : ''
+          }`}
+          bodyClass="tight"
+          actions={
+            <button className="btn sm" onClick={() => setResult(null)}>
+              Dismiss
+            </button>
+          }
+        >
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Child</th>
+                  <th>Channel</th>
+                  <th>Result</th>
+                  <th>Detail</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.recipients.map((r) => (
+                  <tr key={r.student_id}>
+                    <td className="cell-title">{r.child_name}</td>
+                    <td>{r.channel === 'none' ? '—' : r.channel || '—'}</td>
+                    <td>
+                      {r.status === 'sent' ? (
+                        <span className="badge green">sent</span>
+                      ) : r.status === 'skipped' ? (
+                        <span className="badge">skipped</span>
+                      ) : (
+                        <span className="badge red">failed</span>
+                      )}
+                    </td>
+                    <td className="small muted">{r.detail || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {loading && <Loading label="Preparing messages…" />}
 
       {data && !loading && (
@@ -256,6 +353,24 @@ export default function Messages() {
           bodyClass="tight"
           actions={
             <div className="row">
+              {automated && canManage && (
+                <button
+                  className="btn primary"
+                  onClick={sendToEveryone}
+                  disabled={sending || reachable.length === 0 || data.blanks?.length > 0}
+                  title={
+                    data.blanks?.length
+                      ? 'Fill in the blanks first'
+                      : `Send to ${reachable.length} parent(s)`
+                  }
+                >
+                  {sending ? (
+                    <span className="spinner" />
+                  ) : (
+                    `📤 Send to all ${reachable.length}`
+                  )}
+                </button>
+              )}
               <button
                 className="btn sm"
                 onClick={() => copy(body, 'Message')}

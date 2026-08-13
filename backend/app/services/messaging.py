@@ -100,6 +100,32 @@ def render(body: str, recipient: dict[str, Any]) -> str:
     return out
 
 
+def to_variables(rendered: str, recipient: dict[str, Any]) -> list[str]:
+    """Positional variables for the approved provider template.
+
+    Both channels can only send templates cleared in advance — by Meta for
+    WhatsApp, on the DLT portal for SMS — so the notice the school types cannot
+    go out as-is. It travels instead as the second variable of a template
+    shaped "Dear Parent of {{1}}, {{2}}", which is what lets the wording change
+    without a fresh approval each time.
+
+    The salutation and sign-off belong to the approved template, so they are
+    stripped from the body here rather than being sent twice.
+    """
+    child = recipient.get("child_name") or "your child"
+    lines = [line.strip() for line in rendered.splitlines()]
+    school = school_label()
+
+    kept = [
+        line for line in lines
+        if line
+        and not line.lower().startswith("dear parent")
+        and line.rstrip(",") != school
+        and line.rstrip(",").lower() not in {"thank you", "regards", "warm regards"}
+    ]
+    return [child, " ".join(kept).strip() or rendered.strip()]
+
+
 def unfilled_blanks(body: str) -> list[str]:
     """The <...> prompts still sitting in a message."""
     import re
