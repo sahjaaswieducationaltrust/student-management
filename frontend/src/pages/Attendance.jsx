@@ -16,6 +16,9 @@ export default function Attendance() {
   const toast = useToast()
   const [classrooms, setClassrooms] = useState([])
   const [classroomId, setClassroomId] = useState('')
+  // Daycare cuts across classes, so its roll is drawn from who is enrolled in
+  // daycare rather than from a class.
+  const [session, setSession] = useState('class')
   const [date, setDate] = useState(today())
   const [rows, setRows] = useState([])
   const [marks, setMarks] = useState({})
@@ -33,10 +36,17 @@ export default function Attendance() {
   }, [toast])
 
   const load = useCallback(async () => {
-    if (!classroomId) return
+    if (session === 'class' && !classroomId) return
     setLoading(true)
     try {
-      const { data } = await api.get('/api/attendance', { params: { classroom_id: classroomId, date } })
+      const { data } = await api.get('/api/attendance', {
+        params: {
+          // The daycare roll spans every class, so no class is sent for it.
+          classroom_id: session === 'class' ? classroomId : undefined,
+          session,
+          date,
+        },
+      })
       setRows(data)
       setMarks(Object.fromEntries(data.map((r) => [r.student_id, r.status || 'present'])))
     } catch (err) {
@@ -44,7 +54,7 @@ export default function Attendance() {
     } finally {
       setLoading(false)
     }
-  }, [classroomId, date, toast])
+  }, [classroomId, session, date, toast])
 
   useEffect(() => {
     load()
@@ -56,7 +66,8 @@ export default function Attendance() {
     setSaving(true)
     try {
       await api.post('/api/attendance', {
-        classroom_id: classroomId,
+        classroom_id: session === 'class' ? classroomId : null,
+        session,
         date,
         entries: rows.map((r) => ({ student_id: r.student_id, status: marks[r.student_id] || 'present' })),
       })
@@ -87,17 +98,26 @@ export default function Attendance() {
         }
       >
         <div className="row">
-          <div className="field" style={{ minWidth: 200 }}>
-            <label>Class</label>
-            <select value={classroomId} onChange={(e) => setClassroomId(e.target.value)}>
-              {classrooms.length === 0 && <option value="">No classes</option>}
-              {classrooms.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.student_count})
-                </option>
-              ))}
+          <div className="field" style={{ minWidth: 180 }}>
+            <label>Session</label>
+            <select value={session} onChange={(e) => setSession(e.target.value)}>
+              <option value="class">Class roll call</option>
+              <option value="daycare">Daycare</option>
             </select>
           </div>
+          {session === 'class' && (
+            <div className="field" style={{ minWidth: 200 }}>
+              <label>Class</label>
+              <select value={classroomId} onChange={(e) => setClassroomId(e.target.value)}>
+                {classrooms.length === 0 && <option value="">No classes</option>}
+                {classrooms.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.student_count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="field" style={{ minWidth: 170 }}>
             <label>Date</label>
             <input type="date" max={today()} value={date} onChange={(e) => setDate(e.target.value)} />
@@ -133,8 +153,20 @@ export default function Attendance() {
         ) : rows.length === 0 ? (
           <Empty
             icon="📋"
-            title={classrooms.length ? 'No active children in this class' : 'Create a class first'}
-            hint={classrooms.length ? 'Enrol children into this class to take attendance.' : undefined}
+            title={
+              session === 'daycare'
+                ? 'Nobody is enrolled in daycare'
+                : classrooms.length
+                  ? 'No active children in this class'
+                  : 'Create a class first'
+            }
+            hint={
+              session === 'daycare'
+                ? "Tick 'Stays for daycare' on a child's profile and set their hours."
+                : classrooms.length
+                  ? 'Enrol children into this class to take attendance.'
+                  : undefined
+            }
             action={
               <Link className="btn primary" to={classrooms.length ? '/students' : '/classes'}>
                 {classrooms.length ? 'Go to Children' : 'Go to Classes'}
@@ -159,9 +191,14 @@ export default function Attendance() {
                     <td>
                       <div className="row" style={{ gap: 10, flexWrap: 'nowrap' }}>
                         <ChildAvatar gender={r.gender} name={r.student_name} />
-                        <Link to={`/students/${r.student_id}`} className="cell-title">
-                          {r.student_name}
-                        </Link>
+                        <div style={{ minWidth: 0 }}>
+                          <Link to={`/students/${r.student_id}`} className="cell-title">
+                            {r.student_name}
+                          </Link>
+                          {session === 'daycare' && r.daycare_hours != null && (
+                            <div className="cell-sub">{r.daycare_hours} hrs/day</div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="muted">{r.admission_no}</td>

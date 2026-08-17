@@ -290,7 +290,11 @@ async def outstanding_dues(
             }
         )
 
-    rows.sort(key=lambda r: (-r["overdue_amount"], -r["balance"]))
+    # Most overdue first: this list exists to be worked through, and whoever is
+    # furthest behind should be chased first. Name breaks ties so families in
+    # the same position appear in a stable, findable order rather than whatever
+    # Mongo returned.
+    rows.sort(key=lambda r: (-r["overdue_amount"], -r["balance"], r["student_name"].lower()))
     return rows
 
 

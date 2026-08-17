@@ -18,12 +18,14 @@ from ..schemas import (
     is_free_category,
 )
 from ..services.counters import next_admission_no
+from ..services.daycare import build_enrolment, eligibility_note, fee_component
 from ..services.fees import build_fee_plan, summarise
 from ..services.payments import create_payment, paid_totals
 from ..utils import (
     age_from_dob,
     encode_dates,
     money,
+    name_sort_key,
     now_utc,
     person_name,
     serialize,
@@ -77,7 +79,50 @@ async def enrich(db: AsyncDatabase, doc: dict, paid: float | None = None) -> dic
     out["fee_category_label"] = FEE_CATEGORY_LABELS.get(
         out.get("fee_category") or FeeCategory.regular.value, "Regular"
     )
+    out["daycare_eligibility_note"] = eligibility_note(doc.get("daycare"), doc.get("date_of_birth"))
     return out
+
+
+async def _rebuild_plan(db: AsyncDatabase, student: dict, daycare: dict | None) -> dict:
+    """Regenerate a plan from the class structure plus the daycare add-on.
+
+    Any concession already agreed is carried over, so re-pricing daycare does
+    not quietly undo a discount the parents were promised.
+    """
+    plan = student.get("fee_plan") or {}
+    components: list[dict] = []
+    academic_year = plan.get("academic_year") or settings.academic_year
+
+    if student.get("classroom_id"):
+        classroom = await db.classrooms.find_one(
+            {"_id": to_object_id(student["classroom_id"], "classroom id")}
+        )
+        if classroom:
+            components.extend(classroom.get("fee_components") or [])
+            academic_year = classroom.get("academic_year") or academic_year
+
+    components.extend(fee_component(daycare))
+
+    # An agreed total was negotiated against the old set of components, so it
+    # cannot simply carry over — the daycare change has to move the total.
+    # A percentage concession is preserved instead.
+    discount = money(plan.get("discount", 0))
+    gross_before = money(plan.get("gross", 0))
+    share = (discount / gross_before) if gross_before > 0 else 0.0
+
+    rebuilt = build_fee_plan(
+        components,
+        academic_year=academic_year,
+        discount_reason=plan.get("discount_reason"),
+    )
+    if share > 0:
+        rebuilt = build_fee_plan(
+            components,
+            academic_year=academic_year,
+            discount=money(rebuilt["gross"] * share),
+            discount_reason=plan.get("discount_reason"),
+        )
+    return rebuilt
 
 
 async def get_student_or_404(db: AsyncDatabase, student_id: str) -> dict:
@@ -119,7 +164,10 @@ async def list_students(
     # Dues are derived from the fee plan and the receipts, not stored on the
     # student, so filtering and totalling by them happens here rather than in
     # the query. A preschool roll is small enough for this to be cheap.
-    docs = await db.students.find(query).sort("created_at", -1).to_list(2000)
+    # Sorted here rather than in the query: the rows get filtered and paged in
+    # Python below anyway, and a case-folded key is not something Mongo's
+    # default byte ordering gives us.
+    docs = sorted(await db.students.find(query).to_list(2000), key=name_sort_key)
     paid_map = await paid_totals(db, [str(d["_id"]) for d in docs])
 
     rows = []
@@ -183,6 +231,21 @@ async def create_student(payload: StudentCreate, db: DbDep, user: CurrentUser):
             raise HTTPException(status_code=400, detail="Classroom not found")
         components = classroom.get("fee_components") or []
         academic_year = classroom.get("academic_year") or settings.academic_year
+
+    # Daycare is an add-on rather than a class, so it is priced from the child's
+    # own hours and age and appended to whatever the class charges. A child
+    # taking only daycare gets a plan made of this line alone.
+    doc["daycare"] = encode_dates(
+        build_enrolment(
+            hours_per_day=payload.daycare.hours_per_day if payload.daycare else 0,
+            dob=payload.date_of_birth,
+            rate_per_hour=payload.daycare.rate_per_hour if payload.daycare else None,
+            started_on=(payload.daycare.started_on if payload.daycare else None)
+            or payload.admission_date,
+            note=payload.daycare.note if payload.daycare else None,
+        )
+    )
+    components = [*components, *fee_component(doc["daycare"])]
 
     # A concession category is a full waiver and overrides whatever fee was
     # typed in, so a mis-keyed amount can never make a free seat billable.
@@ -254,10 +317,30 @@ async def update_student(student_id: str, payload: StudentUpdate, db: DbDep):
             raise HTTPException(status_code=400, detail="Classroom not found")
     updates["updated_at"] = now_utc()
 
+    existing = await get_student_or_404(db, student_id)
+
+    # Changing the hours changes the money, so the plan is rebuilt here rather
+    # than left for someone to remember to regenerate from the profile.
+    if "daycare" in updates:
+        updates["daycare"] = encode_dates(
+            build_enrolment(
+                hours_per_day=updates["daycare"].get("hours_per_day", 0),
+                dob=updates.get("date_of_birth") or existing.get("date_of_birth"),
+                rate_per_hour=updates["daycare"].get("rate_per_hour"),
+                started_on=updates["daycare"].get("started_on"),
+                note=updates["daycare"].get("note"),
+            )
+        )
+        if not is_free_category(
+            updates.get("fee_category") or existing.get("fee_category")
+        ):
+            updates["fee_plan"] = encode_dates(
+                await _rebuild_plan(db, existing, updates["daycare"])
+            )
+
     # Moving a child onto a concession category has to zero the money as well as
     # the label, otherwise a staff ward keeps showing up in the dues list.
     if is_free_category(updates.get("fee_category")):
-        existing = await get_student_or_404(db, student_id)
         plan = existing.get("fee_plan") or {}
         label = FEE_CATEGORY_LABELS[updates["fee_category"]]
         updates["fee_plan"] = encode_dates(
@@ -318,6 +401,10 @@ async def assign_fee_plan(student_id: str, payload: FeePlanAssign, db: DbDep):
             )
 
     components.extend(c.model_dump() for c in payload.extra_items)
+    # Rebuilding the plan must not quietly drop the daycare the child is
+    # enrolled in — it is priced on the student, not the classroom, so nothing
+    # else would put it back.
+    components.extend(fee_component(student.get("daycare")))
 
     # The category on the payload wins; falling back to the one already on the
     # record means rebuilding a free seat's plan cannot silently start charging.

@@ -27,6 +27,12 @@ async def school_settings():
         "currency_symbol": settings.currency_symbol,
         "academic_year": settings.academic_year,
         "letterhead_file": settings.letterhead_filename,
+        # The enrolment form previews the daycare charge as hours are typed,
+        # so it needs the same rates the server prices with.
+        "daycare_rate_under": settings.daycare_rate_under,
+        "daycare_rate_over": settings.daycare_rate_over,
+        "daycare_age_threshold": settings.daycare_age_threshold,
+        "daycare_max_hours": settings.daycare_max_hours,
     }
 
 

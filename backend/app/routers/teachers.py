@@ -7,7 +7,7 @@ from pymongo.errors import DuplicateKeyError
 from ..deps import DbDep, get_current_user, require_roles
 from ..schemas import TeacherCreate, TeacherOut, TeacherUpdate
 from ..services.counters import next_employee_no
-from ..utils import encode_dates, now_utc, serialize, to_object_id
+from ..utils import encode_dates, name_sort_key, now_utc, serialize, to_object_id
 
 router = APIRouter(
     prefix="/api/teachers", tags=["teachers"], dependencies=[Depends(get_current_user)]
@@ -42,7 +42,7 @@ async def list_teachers(
             {"phone": rx},
             {"designation": rx},
         ]
-    docs = await db.teachers.find(query).sort("created_at", -1).to_list(500)
+    docs = sorted(await db.teachers.find(query).to_list(500), key=name_sort_key)
     return [await enrich(db, d) for d in docs]
 
 

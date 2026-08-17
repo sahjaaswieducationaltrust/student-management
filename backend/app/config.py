@@ -88,6 +88,15 @@ class Settings(BaseSettings):
         path = self.letterhead_path
         return path.name if path else None
 
+    # --- daycare ---
+    # Charged per hour of daily stay, per month: a 3-year-old staying three
+    # hours a day costs 3 x 700 = 2100 a month. Younger children need more
+    # minding, so they cost more per hour.
+    daycare_rate_under: float = 1000.0  # per hour per month, below the age below
+    daycare_rate_over: float = 700.0  # per hour per month, at or above it
+    daycare_age_threshold: int = 3  # years
+    daycare_max_hours: int = 12
+
     # --- academics ---
     academic_year: str = "2026-27"
     session_start_month: int = 4  # April

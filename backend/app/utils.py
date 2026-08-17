@@ -31,6 +31,25 @@ def person_name(*parts: str | None) -> str:
     return " ".join(filter(None, (title_name(p) for p in parts)))
 
 
+def name_sort_key(doc: dict[str, Any]) -> tuple[str, str]:
+    """Order people by name the way a person reading the list expects.
+
+    Case-folded deliberately. Mongo sorts strings by their bytes, which puts
+    every capital ahead of every lowercase letter — one child entered as
+    "aarav" would file after "Zara". Names are proper-cased on save now, so
+    that is unlikely, but the register is decades long and one hurried entry
+    should not push a child to the bottom of the roll.
+
+    Sorted on the first name because that is what a preschool calls a child
+    by, and because half these records carry the whole name in that field
+    with no surname at all.
+    """
+    return (
+        str(doc.get("first_name") or "").strip().lower(),
+        str(doc.get("last_name") or "").strip().lower(),
+    )
+
+
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 

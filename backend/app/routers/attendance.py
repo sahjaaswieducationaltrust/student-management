@@ -1,11 +1,12 @@
 from datetime import date, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pymongo import UpdateOne
 
 from ..deps import CurrentUser, DbDep, get_current_user
 from ..schemas import AttendanceBulkCreate, AttendanceOut
-from ..utils import encode_dates, now_utc, person_name, to_object_id
+from ..utils import encode_dates, name_sort_key, now_utc, person_name, to_object_id
 
 router = APIRouter(
     prefix="/api/attendance", tags=["attendance"], dependencies=[Depends(get_current_user)]
@@ -15,25 +16,44 @@ router = APIRouter(
 @router.get("", response_model=list[AttendanceOut])
 async def attendance_sheet(
     db: DbDep,
-    classroom_id: str,
+    classroom_id: str | None = None,
+    session: Literal["class", "daycare"] = "class",
     on: date | None = Query(default=None, alias="date"),
 ):
-    """Roll-call sheet: every active child in the class plus any mark already saved."""
+    """Roll-call sheet plus any mark already saved.
+
+    The daycare roll is drawn from who is *enrolled in daycare*, not from a
+    class, because daycare cuts across classes: a Nursery child staying three
+    hours belongs on both rolls, and a child from another school belongs only
+    on this one.
+    """
     on = on or date.today()
-    students = (
-        await db.students.find({"classroom_id": classroom_id, "status": "active"})
-        .sort("first_name", 1)
-        .to_list(300)
-    )
-    marks = await db.attendance.find(
-        {"classroom_id": classroom_id, "date": encode_dates(on)}
-    ).to_list(300)
+
+    if session == "daycare":
+        query: dict = {"status": "active", "daycare.enrolled": True}
+        if classroom_id:
+            query["classroom_id"] = classroom_id
+    else:
+        if not classroom_id:
+            raise HTTPException(
+                status_code=400, detail="classroom_id is required for the class roll"
+            )
+        query = {"status": "active", "classroom_id": classroom_id}
+
+    students = sorted(await db.students.find(query).to_list(300), key=name_sort_key)
+
+    marks = await db.attendance.find({
+        "date": encode_dates(on),
+        "session": session,
+        "student_id": {"$in": [str(s["_id"]) for s in students]},
+    }).to_list(300)
     by_student = {m["student_id"]: m for m in marks}
 
     rows = []
     for student in students:
         sid = str(student["_id"])
         mark = by_student.get(sid)
+        daycare = student.get("daycare") or {}
         rows.append(
             {
                 "id": str(mark["_id"]) if mark else None,
@@ -41,7 +61,9 @@ async def attendance_sheet(
                 "student_name": person_name(student.get("first_name"), student.get("last_name")),
                 "gender": student.get("gender"),
                 "admission_no": student.get("admission_no", ""),
-                "classroom_id": classroom_id,
+                "classroom_id": student.get("classroom_id"),
+                "session": session,
+                "daycare_hours": daycare.get("hours_per_day") if daycare.get("enrolled") else None,
                 "date": on,
                 "status": mark.get("status") if mark else None,
                 "remarks": mark.get("remarks") if mark else None,
@@ -58,7 +80,7 @@ async def save_attendance(payload: AttendanceBulkCreate, db: DbDep, user: Curren
     on = encode_dates(payload.date)
     operations = [
         UpdateOne(
-            {"student_id": entry.student_id, "date": on},
+            {"student_id": entry.student_id, "date": on, "session": payload.session},
             {
                 "$set": {
                     "classroom_id": payload.classroom_id,

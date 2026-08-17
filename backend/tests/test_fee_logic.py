@@ -282,6 +282,99 @@ finally:
         importlib.reload(_cfg)
         importlib.reload(_rp)
 
+print("\n[7k] Alphabetical ordering of people")
+from app.utils import name_sort_key
+
+_roll = [
+    {"first_name": "Zara", "last_name": "Ali"},
+    {"first_name": "aarav", "last_name": "Kumar"},   # entered in a hurry
+    {"first_name": "Aarna", "last_name": None},
+    {"first_name": "Aarna", "last_name": "Tamrakar"},
+    {"first_name": "  Charvik  ", "last_name": "Gowda"},
+]
+_ordered = [f"{d['first_name'].strip()} {d['last_name'] or ''}".strip()
+            for d in sorted(_roll, key=name_sort_key)]
+check("a lowercase entry is not banished to the end",
+      _ordered[0] == "aarav Kumar", str(_ordered))
+check("Zara sorts last, not first", _ordered[-1] == "Zara Ali", str(_ordered))
+check("the surname breaks ties on the first name",
+      _ordered.index("Aarna") < _ordered.index("Aarna Tamrakar"), str(_ordered))
+check("surrounding spaces do not affect the order",
+      _ordered[3] == "Charvik Gowda", str(_ordered))
+check("a missing surname does not raise",
+      name_sort_key({"first_name": "Solo"}) == ("solo", ""))
+check("an empty record sorts first rather than failing",
+      name_sort_key({}) == ("", ""))
+
+print("\n[7l] Daycare pricing")
+from app.services.daycare import (
+    build_enrolment,
+    eligibility_note,
+    fee_component,
+    rate_for_age,
+)
+
+# The example the school gave: 3+ years old, three hours a day = 2100 a month.
+_over3 = build_enrolment(hours_per_day=3, dob=None, rate_per_hour=700)
+check("3 hrs at the over-3 rate is 2100 a month", _over3["monthly_fee"] == 2100,
+      str(_over3["monthly_fee"]))
+_under3 = build_enrolment(hours_per_day=1, dob=None, rate_per_hour=1000)
+check("1 hr at the under-3 rate is 1000 a month", _under3["monthly_fee"] == 1000,
+      str(_under3["monthly_fee"]))
+
+check("under the threshold takes the higher rate", rate_for_age(2.9) == 1000)
+check("at the threshold takes the lower rate", rate_for_age(3.0) == 700)
+check("well over the threshold takes the lower rate", rate_for_age(6) == 700)
+check("an unknown age takes the higher rate rather than undercharging",
+      rate_for_age(None) == 1000)
+
+_half = build_enrolment(hours_per_day=2.5, dob=None, rate_per_hour=700)
+check("half hours are priced", _half["monthly_fee"] == 1750, str(_half["monthly_fee"]))
+check("the component names the hours",
+      fee_component(_half)[0]["name"] == "Daycare (2.5 hrs/day)",
+      fee_component(_half)[0]["name"])
+check("daycare is charged monthly, not as a lump",
+      fee_component(_half)[0]["frequency"] == "monthly")
+
+check("no hours means no enrolment and no charge",
+      build_enrolment(0, None)["enrolled"] is False and fee_component(build_enrolment(0, None)) == [])
+check("hours are capped rather than accepted unbounded",
+      build_enrolment(99, None, rate_per_hour=700)["hours_per_day"] == 12,
+      str(build_enrolment(99, None, rate_per_hour=700)["hours_per_day"]))
+
+# A class fee plus daycare: the daycare line must spread over the year.
+_combined = build_fee_plan(
+    [{"name": "Admission Fee", "amount": 48000, "frequency": "one_time"},
+     *fee_component(_over3)],
+    academic_year="2026-27",
+)
+check("a class fee plus daycare totals correctly",
+      _combined["gross"] == 48000 + 2100 * 12, str(_combined["gross"]))
+check("adding daycare spreads the year into monthly instalments",
+      len(_combined["installments"]) == 12, str(len(_combined["installments"])))
+check("the first instalment carries both the one-time fee and the first month",
+      _combined["installments"][0]["amount"] == 48000 + 2100,
+      str(_combined["installments"][0]["amount"]))
+check("later instalments are daycare only",
+      _combined["installments"][1]["amount"] == 2100,
+      str(_combined["installments"][1]["amount"]))
+
+# A child from another school taking daycare alone.
+_only = build_fee_plan(fee_component(_over3), academic_year="2026-27")
+check("daycare alone still produces a full year's plan",
+      _only["gross"] == 2100 * 12 and len(_only["installments"]) == 12, str(_only["gross"]))
+
+# Turning 3 does not move a fee already agreed, but is surfaced.
+_still_high = {"enrolled": True, "rate_per_hour": 1000, "hours_per_day": 3}
+_note = eligibility_note(_still_high, date(date.today().year - 4, 1, 1))
+check("aging into the cheaper band is reported, not applied",
+      _note is not None and "700" in _note, str(_note))
+check("a child already on the right rate raises no note",
+      eligibility_note({"enrolled": True, "rate_per_hour": 700, "hours_per_day": 3},
+                       date(date.today().year - 4, 1, 1)) is None)
+check("a child not in daycare raises no note",
+      eligibility_note({"enrolled": False}, date(2020, 1, 1)) is None)
+
 print("\n[8] FastAPI app / OpenAPI schema")
 from app.main import app
 schema = app.openapi()

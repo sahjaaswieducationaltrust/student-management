@@ -12,6 +12,7 @@ import {
   toInputDate,
   today,
 } from '../lib/format'
+import { useAuth } from '../context/AuthContext'
 import { Field, Modal } from './ui'
 import { useToast } from './Toast'
 
@@ -42,6 +43,11 @@ const blank = {
   transport_route: '',
   notes: '',
   fee_category: 'regular',
+  // daycare add-on — independent of the class the child is in
+  daycare_enrolled: false,
+  daycare_hours: '',
+  daycare_rate: '',
+  daycare_note: '',
   // fee agreement (new enrolments only)
   agreed_fee: '',
   fee_note: '',
@@ -63,6 +69,10 @@ function fromStudent(student) {
     classroom_id: student.classroom_id || '',
     guardian: { ...blank.guardian, ...(student.guardian || {}) },
     medical: { ...blank.medical, ...(student.medical || {}) },
+    daycare_enrolled: !!student.daycare?.enrolled,
+    daycare_hours: student.daycare?.hours_per_day ? String(student.daycare.hours_per_day) : '',
+    daycare_rate: student.daycare?.rate_per_hour ? String(student.daycare.rate_per_hour) : '',
+    daycare_note: student.daycare?.note || '',
   }
 }
 
@@ -77,6 +87,7 @@ function clean(value) {
 
 export default function StudentForm({ student, classrooms, onClose, onSaved }) {
   const toast = useToast()
+  const { school } = useAuth()
   const [form, setForm] = useState(() => fromStudent(student))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -105,6 +116,25 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
       collect_initial: freeSeat ? false : f.collect_initial,
     }))
   }, [standardFee, student, freeSeat])
+
+  // Daycare is priced per hour of daily stay, per month, at a rate that
+  // depends on the child's age. Mirrors services/daycare.py so the desk sees
+  // the same number the server will charge.
+  const ageYears = useMemo(() => {
+    if (!form.date_of_birth) return null
+    const dob = new Date(form.date_of_birth)
+    if (Number.isNaN(dob.getTime())) return null
+    return (Date.now() - dob.getTime()) / (365.25 * 24 * 3600 * 1000)
+  }, [form.date_of_birth])
+
+  const suggestedRate =
+    ageYears == null || ageYears < (school.daycare_age_threshold ?? 3)
+      ? school.daycare_rate_under ?? 1000
+      : school.daycare_rate_over ?? 700
+
+  const daycareRate = form.daycare_rate === '' ? suggestedRate : Number(form.daycare_rate)
+  const daycareHours = Number(form.daycare_hours || 0)
+  const daycareMonthly = form.daycare_enrolled ? daycareHours * daycareRate : 0
 
   const agreedFee = Number(form.agreed_fee || 0)
   const difference = agreedFee - standardFee
@@ -140,10 +170,22 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
       'initial_receipt',
       'agreed_fee', 'fee_note', 'collect_initial', 'initial_amount',
       'initial_mode', 'initial_reference', 'initial_date', 'initial_particulars',
+      'daycare_enrolled', 'daycare_hours', 'daycare_rate', 'daycare_note',
+      'daycare_note_text',
     ]) {
       delete payload[key]
     }
     payload.transport_opted = !!form.transport_opted
+    // The server re-derives the rate and the monthly fee; sending them keeps
+    // an agreed rate from being reset when someone edits an older record.
+    payload.daycare = form.daycare_enrolled
+      ? {
+          enrolled: true,
+          hours_per_day: daycareHours,
+          rate_per_hour: daycareRate,
+          note: form.daycare_note || null,
+        }
+      : { enrolled: false, hours_per_day: 0 }
 
     if (!student) {
       if (form.agreed_fee !== '') payload.agreed_fee = agreedFee
@@ -421,6 +463,86 @@ export default function StudentForm({ student, classrooms, onClose, onSaved }) {
               </div>
             )}
               </>
+            )}
+          </>
+        )}
+
+        <div className="section-label">Daycare</div>
+        <div className="full">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={form.daycare_enrolled}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  daycare_enrolled: e.target.checked,
+                  daycare_hours: e.target.checked && !f.daycare_hours ? '1' : f.daycare_hours,
+                }))
+              }
+            />
+            Stays for daycare
+          </label>
+          <div className="hint" style={{ marginTop: 4 }}>
+            Charged monthly per hour of daily stay, on top of any class fee. A child from
+            another school can take daycare on its own — leave the class unassigned.
+          </div>
+        </div>
+
+        {form.daycare_enrolled && (
+          <>
+            <Field label="Hours per day" required>
+              <input
+                type="number"
+                min="0.5"
+                max={school.daycare_max_hours ?? 12}
+                step="0.5"
+                required
+                value={form.daycare_hours}
+                onChange={set('daycare_hours')}
+              />
+            </Field>
+            <Field
+              label="Rate per hour / month"
+              hint={
+                ageYears == null
+                  ? 'No date of birth yet — the higher rate is assumed'
+                  : `Age ${ageYears.toFixed(1)} · standard rate ${money(suggestedRate)}`
+              }
+            >
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.daycare_rate}
+                onChange={set('daycare_rate')}
+                placeholder={String(suggestedRate)}
+              />
+            </Field>
+            <Field label="Note" className="full">
+              <input
+                value={form.daycare_note}
+                onChange={set('daycare_note')}
+                placeholder="e.g. 2pm–5pm, picked up by grandmother"
+              />
+            </Field>
+            {daycareHours > 0 && (
+              <div className="full fee-summary-strip">
+                <div>
+                  <span>Daycare per month</span>
+                  <b>{money(daycareMonthly)}</b>
+                </div>
+                <div>
+                  <span>Over 12 months</span>
+                  <b>{money(daycareMonthly * 12)}</b>
+                </div>
+                <div>
+                  <span>Working</span>
+                  <b className="muted">
+                    {daycareHours} × {money(daycareRate)}
+                  </b>
+                </div>
+              </div>
             )}
           </>
         )}

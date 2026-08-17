@@ -215,6 +215,9 @@ export default function Students() {
                             </Link>
                             <div className="cell-sub">
                               {s.gender === 'female' ? 'Girl' : s.gender === 'male' ? 'Boy' : 'Child'}
+                              {s.daycare?.enrolled
+                                ? ` · 🧸 Daycare ${s.daycare.hours_per_day} hrs`
+                                : ''}
                               {s.medical?.allergies ? ` · ⚠ ${s.medical.allergies}` : ''}
                             </div>
                           </div>

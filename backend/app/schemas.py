@@ -188,6 +188,23 @@ class MedicalInfo(BaseModel):
     doctor_phone: str | None = None
 
 
+class DaycareEnrolment(BaseModel):
+    """Daycare taken alongside (or instead of) a class.
+
+    Priced per hour of daily stay, per month. The rate is resolved from the
+    child's age when they join and then held, so a birthday does not move a fee
+    a parent has already agreed to.
+    """
+
+    enrolled: bool = False
+    hours_per_day: float = Field(default=0, ge=0, le=12)
+    # Left unset on the way in, the server fills it from the child's age.
+    rate_per_hour: float | None = Field(default=None, ge=0)
+    monthly_fee: float = 0
+    started_on: date | None = None
+    note: str | None = Field(default=None, max_length=200)
+
+
 class StudentBase(BaseModel):
     first_name: str = Field(min_length=1, max_length=60)
     last_name: str | None = Field(default=None, max_length=60)
@@ -202,6 +219,7 @@ class StudentBase(BaseModel):
     medical: MedicalInfo = MedicalInfo()
     transport_opted: bool = False
     transport_route: str | None = None
+    daycare: DaycareEnrolment = DaycareEnrolment()
     notes: str | None = None
 
     @field_validator("date_of_birth")
@@ -247,6 +265,7 @@ class StudentUpdate(BaseModel):
     medical: MedicalInfo | None = None
     transport_opted: bool | None = None
     transport_route: str | None = None
+    daycare: DaycareEnrolment | None = None
     notes: str | None = None
 
 
@@ -284,6 +303,9 @@ class StudentOut(StudentBase):
     fee_plan: FeePlanOut | None = None
     fee_summary: StudentFeeSummary | None = None
     fee_category_label: str = FEE_CATEGORY_LABELS[FeeCategory.regular.value]
+    # Set when the child has aged into the cheaper daycare band but is still
+    # on the rate agreed at enrolment.
+    daycare_eligibility_note: str | None = None
     # Set by the admin while collecting an instalment; overrides the date the
     # schedule would otherwise have computed.
     next_due_override: date | None = None
@@ -461,8 +483,10 @@ class AttendanceEntry(BaseModel):
 
 
 class AttendanceBulkCreate(BaseModel):
-    classroom_id: str
+    # Optional for daycare, whose roll spans every class.
+    classroom_id: str | None = None
     date: date
+    session: Literal["class", "daycare"] = "class"
     entries: list[AttendanceEntry]
 
 
@@ -473,6 +497,8 @@ class AttendanceOut(BaseModel):
     gender: Literal["male", "female", "other"] | None = None
     admission_no: str
     classroom_id: str | None = None
+    session: Literal["class", "daycare"] = "class"
+    daycare_hours: float | None = None
     date: date
     status: AttendanceStatus | None = None
     remarks: str | None = None
