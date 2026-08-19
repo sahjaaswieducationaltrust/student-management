@@ -46,6 +46,7 @@ async def dashboard(db: DbDep):
     students_total = await db.students.count_documents({})
     students_active = await db.students.count_documents({"status": "active"})
     teachers_active = await db.teachers.count_documents({"status": "active"})
+    staff_active = await db.staff.count_documents({"status": "active"})
     classrooms_count = await db.classrooms.count_documents({})
 
     # ---- fee position across active students ----
@@ -155,6 +156,7 @@ async def dashboard(db: DbDep):
         "students_total": students_total,
         "students_active": students_active,
         "teachers_active": teachers_active,
+        "staff_active": staff_active,
         "classrooms": classrooms_count,
         "fees_expected": money(expected),
         "fees_collected": money(collected.get("all", 0)),

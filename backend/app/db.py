@@ -42,6 +42,8 @@ async def _ensure_indexes(db: AsyncDatabase) -> None:
     await db.students.create_index([("status", 1), ("classroom_id", 1)])
     await db.students.create_index([("first_name", "text"), ("last_name", "text")])
     await db.teachers.create_index("employee_no", unique=True)
+    await db.staff.create_index("employee_no", unique=True)
+    await db.staff.create_index([("status", 1), ("department", 1)])
     await db.classrooms.create_index("name")
     await db.payments.create_index("receipt_no", unique=True)
     await db.payments.create_index([("student_id", 1), ("paid_on", -1)])

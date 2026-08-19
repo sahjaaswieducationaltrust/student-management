@@ -17,7 +17,8 @@ from .services.fees import auto_allocate_items, build_fee_plan
 from .utils import encode_dates, money, now_utc
 
 COLLECTIONS = [
-    "users", "students", "teachers", "classrooms", "payments", "attendance", "counters",
+    "users", "students", "teachers", "staff", "classrooms", "payments", "attendance",
+    "counters",
 ]
 
 CLASSES = [
@@ -66,6 +67,21 @@ TEACHERS = [
     ("Priya", "Reddy", "female", "Class Teacher", "B.A., NTT", 35000, ["Rhymes", "Craft"]),
     ("Rahul", "Verma", "male", "Activity Coach", "B.P.Ed", 30000, ["Physical Play", "Music"]),
     ("Fatima", "Khan", "female", "Assistant Teacher", "B.Sc., NTT", 26000, ["Sensory Play"]),
+]
+
+STAFF = [
+    ("Latha", "Devi", "female", "Front Office", "Receptionist", "B.Com", 22000,
+     ["Admissions desk", "Parent calls"]),
+    ("Suresh", "Kumar", "male", "Transport", "Van Driver", "Class 10", 20000,
+     ["School van route 1", "Vehicle upkeep"]),
+    ("Kamala", "Bai", "female", "Care", "Ayah / Helper", "Class 8", 16000,
+     ["Toilet training", "Nap time", "Feeding"]),
+    ("Ramesh", "Yadav", "male", "Security", "Security Guard", "Class 10", 18000,
+     ["Gate duty", "Visitor register"]),
+    ("Shanti", "Rao", "female", "Kitchen", "Cook", "Class 8", 17000,
+     ["Snacks", "Hygiene"]),
+    ("Ganesh", "Pawar", "male", "Housekeeping", "Housekeeping Attendant", None, 15000,
+     ["Classroom cleaning", "Play area"]),
 ]
 
 FIRST_NAMES = [
@@ -137,6 +153,32 @@ async def seed(reset: bool = False) -> None:
         result = await db.teachers.insert_one(doc)
         teacher_ids.append(str(result.inserted_id))
     print(f"Teachers created: {len(teacher_ids)}")
+
+    # ---- non-teaching staff ----
+    staff_count = 0
+    for first, last, gender, department, designation, qualification, salary, duties in STAFF:
+        await db.staff.insert_one(
+            {
+                "employee_no": await next_employee_no(db),
+                "first_name": first, "last_name": last, "gender": gender,
+                "date_of_birth": encode_dates(
+                    today - timedelta(days=365 * random.randint(24, 52))
+                ),
+                "phone": f"+91 9{random.randint(100000000, 999999999)}",
+                "email": None,
+                "address": f"{random.randint(1, 90)} Rose Street, Bengaluru",
+                "qualification": qualification,
+                "department": department, "designation": designation, "duties": duties,
+                "date_of_joining": encode_dates(
+                    today - timedelta(days=random.randint(200, 1800))
+                ),
+                "salary": salary,
+                "emergency_contact": f"+91 9{random.randint(100000000, 999999999)}",
+                "status": "active", "notes": None, "created_at": now_utc(),
+            }
+        )
+        staff_count += 1
+    print(f"Non-teaching staff created: {staff_count}")
 
     # ---- classrooms ----
     classroom_ids = []

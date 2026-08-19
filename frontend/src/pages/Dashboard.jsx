@@ -43,7 +43,7 @@ export default function Dashboard() {
           icon="👩‍🏫"
           label="Teachers"
           value={stats.teachers_active}
-          hint={`${stats.classrooms} classes running`}
+          hint={`${stats.classrooms} classes · ${stats.staff_active} support staff`}
           tone="#fdeee0"
         />
         <StatCard

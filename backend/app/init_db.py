@@ -31,6 +31,7 @@ COLLECTIONS = [
     ("classrooms", "classes and their fee structures"),
     ("students", "children, guardians, medical info, fee plans"),
     ("teachers", "teaching staff"),
+    ("staff", "non-teaching staff"),
     ("payments", "fee receipts"),
     ("attendance", "daily roll call"),
     ("counters", "admission / employee / receipt number sequences"),

@@ -9,7 +9,16 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import close_mongo_connection, connect_to_mongo, get_db
-from .routers import attendance, auth, classrooms, dashboard, fees, students, teachers
+from .routers import (
+    attendance,
+    auth,
+    classrooms,
+    dashboard,
+    fees,
+    staff,
+    students,
+    teachers,
+)
 from .security import hash_password
 from .utils import now_utc
 
@@ -68,6 +77,7 @@ app.include_router(dashboard.router)
 app.include_router(classrooms.router)
 app.include_router(students.router)
 app.include_router(teachers.router)
+app.include_router(staff.router)
 app.include_router(fees.router)
 app.include_router(attendance.router)
 
