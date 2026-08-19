@@ -113,7 +113,7 @@ The API runs at <http://127.0.0.1:8000>, interactive docs at
 On the very first start the backend creates the admin account from `.env`
 (`ADMIN_EMAIL` / `ADMIN_PASSWORD`, default `admin@school.com` / `admin123`).
 
-**Optional — load realistic demo data** (4 classes, 5 teachers, 6 non-teaching
+**Optional — load realistic demo data** (4 classes, 5 teachers, 7 non-teaching
 staff, ~25 children with fee plans, receipts and two weeks of attendance):
 
 ```powershell

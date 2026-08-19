@@ -5,37 +5,46 @@ import { useAuth } from '../context/AuthContext'
 import api, { errorMessage } from '../lib/api'
 import { formatDate, initials, money, toInputDate } from '../lib/format'
 
-// Suggestions only — the field stays free text, since every branch names these
-// roles a little differently (ayah / aaya / helper / caretaker).
-const DEPARTMENTS = [
-  'Front Office',
-  'Administration',
-  'Accounts',
-  'Care',
-  'Housekeeping',
-  'Kitchen',
-  'Transport',
-  'Security',
-  'Maintenance',
-  'Nursing',
-]
+// The roles each department actually hires for. Picking the department narrows
+// the designation list to what belongs under it, so nobody files the cook under
+// Transport. Every branch names these roles a little differently, so both
+// dropdowns end in "Other…", which opens a free-text box.
+const DEPARTMENT_ROLES = {
+  'Front Office': [
+    'Receptionist',
+    'Front Office Executive',
+    'Office Assistant',
+    'Admission Counsellor',
+  ],
+  Administration: ['Administrator', 'Admin Executive', 'Office Manager', 'Data Entry Operator'],
+  Accounts: ['Accountant', 'Accounts Assistant', 'Fee Collection Executive'],
+  'Child Care': [
+    'Ayah / Helper',
+    'Senior Ayah',
+    'Care Taker',
+    'Senior Care Taker',
+    'Daycare Attendant',
+    'Support Staff',
+  ],
+  Housekeeping: ['Housekeeping Attendant', 'Cleaner', 'Sweeper', 'Utility Staff'],
+  Kitchen: ['Cook', 'Assistant Cook', 'Kitchen Helper'],
+  Transport: ['Van Driver', 'Bus Driver', 'Van Attendant', 'Transport Coordinator'],
+  Security: ['Security Guard', 'Security Supervisor', 'Gatekeeper'],
+  Maintenance: ['Maintenance Technician', 'Electrician', 'Plumber', 'Gardener'],
+  Nursing: ['Nurse', 'First-Aid Attendant'],
+}
 
-const DESIGNATIONS = [
-  'Receptionist',
-  'Office Assistant',
-  'Accountant',
-  'Ayah / Helper',
-  'Caretaker',
-  'Housekeeping Attendant',
-  'Cook',
-  'Kitchen Helper',
-  'Van Driver',
-  'Van Attendant',
-  'Security Guard',
-  'Gardener',
-  'Maintenance Technician',
-  'Nurse',
-]
+const DEPARTMENTS = Object.keys(DEPARTMENT_ROLES)
+const ALL_ROLES = [...new Set(Object.values(DEPARTMENT_ROLES).flat())].sort()
+const OTHER = '__other__'
+
+// A department nobody listed above still deserves a full role list. `current`
+// keeps a role already on the record visible even when it sits under another
+// department — the select must never blank out what someone saved.
+const rolesFor = (department, current) => {
+  const roles = DEPARTMENT_ROLES[department] || ALL_ROLES
+  return current && !roles.includes(current) ? [...roles, current] : roles
+}
 
 const blank = {
   first_name: '',
@@ -46,8 +55,8 @@ const blank = {
   email: '',
   address: '',
   qualification: '',
-  department: 'Front Office',
-  designation: 'Support Staff',
+  department: '',
+  designation: '',
   duties: '',
   date_of_joining: '',
   salary: '',
@@ -70,9 +79,46 @@ function StaffForm({ member, onClose, onSaved }) {
         }
       : blank,
   )
+  // A record saved before a department or role was on the list — or typed in by
+  // hand — opens with the free-text box showing rather than silently losing it.
+  const [otherDepartment, setOtherDepartment] = useState(
+    () => !!member?.department && !DEPARTMENTS.includes(member.department),
+  )
+  const [otherDesignation, setOtherDesignation] = useState(
+    () => !!member?.designation && !rolesFor(member.department).includes(member.designation),
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+
+  const changeDepartment = (e) => {
+    const value = e.target.value
+    if (value === OTHER) {
+      setOtherDepartment(true)
+      setForm((f) => ({ ...f, department: '' }))
+      return
+    }
+    setOtherDepartment(false)
+    setForm((f) => ({
+      ...f,
+      department: value,
+      // Keep the designation only while it still belongs under the new
+      // department; a hand-typed one is the desk's own wording, so it stays.
+      designation:
+        otherDesignation || rolesFor(value).includes(f.designation) ? f.designation : '',
+    }))
+  }
+
+  const changeDesignation = (e) => {
+    const value = e.target.value
+    if (value === OTHER) {
+      setOtherDesignation(true)
+      setForm((f) => ({ ...f, designation: '' }))
+      return
+    }
+    setOtherDesignation(false)
+    setForm((f) => ({ ...f, designation: value }))
+  }
 
   const submit = async (event) => {
     event.preventDefault()
@@ -130,16 +176,6 @@ function StaffForm({ member, onClose, onSaved }) {
     >
       <form id="staff-form" onSubmit={submit} className="form-grid">
         {error && <div className="alert error full">{error}</div>}
-        <datalist id="staff-departments">
-          {DEPARTMENTS.map((d) => (
-            <option key={d} value={d} />
-          ))}
-        </datalist>
-        <datalist id="staff-designations">
-          {DESIGNATIONS.map((d) => (
-            <option key={d} value={d} />
-          ))}
-        </datalist>
         <Field label="First name" required>
           <input required value={form.first_name} onChange={set('first_name')} />
         </Field>
@@ -162,21 +198,57 @@ function StaffForm({ member, onClose, onSaved }) {
         <Field label="Date of birth">
           <input type="date" value={form.date_of_birth || ''} onChange={set('date_of_birth')} />
         </Field>
-        <Field label="Department">
-          <input
-            list="staff-departments"
-            value={form.department}
-            onChange={set('department')}
-            placeholder="Front Office"
-          />
+        <Field label="Department" required>
+          <select
+            value={otherDepartment ? OTHER : form.department}
+            onChange={changeDepartment}
+            required={!otherDepartment}
+          >
+            <option value="">Select a department…</option>
+            {DEPARTMENTS.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+            <option value={OTHER}>Other…</option>
+          </select>
+          {otherDepartment && (
+            <input
+              required
+              style={{ marginTop: 8 }}
+              value={form.department}
+              onChange={set('department')}
+              placeholder="Department name"
+            />
+          )}
         </Field>
-        <Field label="Designation">
-          <input
-            list="staff-designations"
-            value={form.designation}
-            onChange={set('designation')}
-            placeholder="Receptionist"
-          />
+        <Field
+          label="Designation"
+          required
+          hint={form.department ? `Roles under ${form.department}` : 'Pick a department first'}
+        >
+          <select
+            value={otherDesignation ? OTHER : form.designation}
+            onChange={changeDesignation}
+            required={!otherDesignation}
+          >
+            <option value="">Select a designation…</option>
+            {rolesFor(form.department, otherDesignation ? '' : form.designation).map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+            <option value={OTHER}>Other…</option>
+          </select>
+          {otherDesignation && (
+            <input
+              required
+              style={{ marginTop: 8 }}
+              value={form.designation}
+              onChange={set('designation')}
+              placeholder="Designation"
+            />
+          )}
         </Field>
         <Field label="Qualification">
           <input value={form.qualification || ''} onChange={set('qualification')} placeholder="B.Com" />
