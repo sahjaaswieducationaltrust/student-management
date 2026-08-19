@@ -45,7 +45,7 @@ with TestClient(app) as client:
     check("unauthenticated request rejected",
           client.get("/api/students", headers={"Authorization": "Bearer bad"}).status_code == 401)
 
-    print("\n[2] Teacher + class with a fee structure")
+    print("\n[2] Teacher, non-teaching staff + class with a fee structure")
     r = client.post("/api/teachers", json={
         "first_name": "Meera", "last_name": "Nair", "phone": "+91 98765 43210",
         "designation": "Class Teacher", "qualification": "M.A., B.Ed", "salary": 42000,
@@ -54,6 +54,34 @@ with TestClient(app) as client:
     teacher = r.json()
     check("employee number auto-generated", teacher["employee_no"].startswith("EMP"),
           teacher["employee_no"])
+
+    r = client.post("/api/staff", json={
+        "first_name": "Latha", "last_name": "Devi", "phone": "+91 98765 11111",
+        "department": "Front Office", "designation": "Receptionist",
+        "duties": ["Admissions desk", "Parent calls"], "salary": 22000,
+    })
+    check("non-teaching staff created", r.status_code == 201, r.text[:150])
+    helper = r.json()
+    check("staff employee number auto-generated", helper["employee_no"].startswith("EMP"),
+          helper["employee_no"])
+    check("staff share one employee-number sequence with teachers",
+          helper["employee_no"] != teacher["employee_no"],
+          f"{teacher['employee_no']} vs {helper['employee_no']}")
+    check("staff kept out of the teacher list",
+          all(t["id"] != helper["id"] for t in client.get("/api/teachers").json()))
+    check("department filter matches",
+          len(client.get("/api/staff", params={"department": "Front Office"}).json()) == 1)
+    check("department filter excludes others",
+          client.get("/api/staff", params={"department": "Kitchen"}).json() == [])
+    check("staff search by designation",
+          len(client.get("/api/staff", params={"search": "reception"}).json()) == 1)
+    check("departments in use listed",
+          client.get("/api/staff/departments").json() == ["Front Office"])
+    r = client.patch(f"/api/staff/{helper['id']}", json={"salary": 24000, "status": "inactive"})
+    check("staff record updated", r.status_code == 200 and r.json()["salary"] == 24000, r.text[:150])
+    check("inactive staff hidden by the active filter",
+          client.get("/api/staff", params={"status": "active"}).json() == [])
+    client.patch(f"/api/staff/{helper['id']}", json={"status": "active"})
 
     r = client.post("/api/classrooms", json={
         "name": "Nursery A", "level": "Nursery", "room": "Rainbow", "capacity": 20,
@@ -200,6 +228,7 @@ with TestClient(app) as client:
     d = client.get("/api/dashboard").json()
     check("dashboard: 1 active child", d["students_active"] == 1)
     check("dashboard: 1 teacher", d["teachers_active"] == 1)
+    check("dashboard: 1 non-teaching staff", d["staff_active"] == 1, str(d["staff_active"]))
     check("dashboard: fees expected", d["fees_expected"] == expected_annual, str(d["fees_expected"]))
     check("dashboard: fees collected",
           d["fees_collected"] == round(first_due["amount"] + 4200, 2), str(d["fees_collected"]))
@@ -238,6 +267,13 @@ with TestClient(app) as client:
           client.post(f"/api/fees/payments/{payment['id']}/cancel", headers=staff,
                       params={"reason": "test"}).status_code == 403)
     check("staff cannot list users", client.get("/api/users", headers=staff).status_code == 403)
+    check("staff can add a non-teaching staff member",
+          client.post("/api/staff", headers=staff,
+                      json={"first_name": "Ramesh", "phone": "+91 98765 22222",
+                            "department": "Security",
+                            "designation": "Security Guard"}).status_code == 201)
+    check("staff cannot delete a non-teaching staff member",
+          client.delete(f"/api/staff/{helper['id']}", headers=staff).status_code == 403)
 
     print("\n[14] Validation + guard rails")
     check("child with receipts cannot be deleted",

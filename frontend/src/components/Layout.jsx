@@ -13,6 +13,7 @@ const NAV = [
     items: [
       { to: '/students', label: 'Children', icon: '🧒' },
       { to: '/teachers', label: 'Teachers', icon: '👩‍🏫' },
+      { to: '/staff', label: 'Non-teaching Staff', icon: '🧹' },
       { to: '/classes', label: 'Classes & Fees', icon: '🏫' },
     ],
   },
@@ -39,6 +40,7 @@ const TITLES = {
   '/': 'Dashboard',
   '/students': 'Children',
   '/teachers': 'Teachers',
+  '/staff': 'Non-teaching Staff',
   '/classes': 'Classes & Fee Structure',
   '/fees': 'Collect Fee',
   '/receipts': 'Fee Receipts',

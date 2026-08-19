@@ -375,6 +375,64 @@ class TeacherOut(TeacherBase):
 
 
 # --------------------------------------------------------------------------- #
+# Non-teaching staff
+#
+# Everyone on the payroll who does not take a class: the front office, ayahs and
+# helpers, kitchen, housekeeping, drivers and security. Deliberately a separate
+# collection from `teachers` — they are never assigned to a class, they have no
+# subjects, and the payroll and headcounts read better split apart. Employee
+# numbers come from the same sequence, so no two people on site share one.
+# --------------------------------------------------------------------------- #
+class StaffBase(BaseModel):
+    first_name: str = Field(min_length=1, max_length=60)
+    last_name: str | None = Field(default=None, max_length=60)
+    gender: Literal["male", "female", "other"] = "female"
+    date_of_birth: date | None = None
+    phone: str = Field(min_length=6, max_length=20)
+    email: EmailStr | None = None
+    address: str | None = None
+    qualification: str | None = None
+    department: str = "Support"
+    designation: str = "Support Staff"
+    duties: list[str] = []
+    date_of_joining: date | None = None
+    salary: float = Field(default=0, ge=0)
+    emergency_contact: str | None = None
+    status: Literal["active", "inactive"] = "active"
+    notes: str | None = None
+
+
+class StaffCreate(StaffBase):
+    employee_no: str | None = None
+
+
+class StaffUpdate(BaseModel):
+    first_name: str | None = None
+    last_name: str | None = None
+    gender: Literal["male", "female", "other"] | None = None
+    date_of_birth: date | None = None
+    phone: str | None = None
+    email: EmailStr | None = None
+    address: str | None = None
+    qualification: str | None = None
+    department: str | None = None
+    designation: str | None = None
+    duties: list[str] | None = None
+    date_of_joining: date | None = None
+    salary: float | None = Field(default=None, ge=0)
+    emergency_contact: str | None = None
+    status: Literal["active", "inactive"] | None = None
+    notes: str | None = None
+
+
+class StaffOut(StaffBase):
+    id: str
+    employee_no: str
+    full_name: str
+    created_at: datetime | None = None
+
+
+# --------------------------------------------------------------------------- #
 # Fees & payments
 # --------------------------------------------------------------------------- #
 class FeePlanAssign(BaseModel):
@@ -511,6 +569,7 @@ class DashboardStats(BaseModel):
     students_total: int = 0
     students_active: int = 0
     teachers_active: int = 0
+    staff_active: int = 0
     classrooms: int = 0
     fees_expected: float = 0
     fees_collected: float = 0

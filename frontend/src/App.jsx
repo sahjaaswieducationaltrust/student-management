@@ -10,6 +10,7 @@ import Login from './pages/Login'
 import ReceiptView from './pages/ReceiptView'
 import Receipts from './pages/Receipts'
 import Reports from './pages/Reports'
+import Staff from './pages/Staff'
 import StudentDetail from './pages/StudentDetail'
 import Students from './pages/Students'
 import Teachers from './pages/Teachers'
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="students" element={<Students />} />
         <Route path="students/:id" element={<StudentDetail />} />
         <Route path="teachers" element={<Teachers />} />
+        <Route path="staff" element={<Staff />} />
         <Route path="classes" element={<Classes />} />
         <Route path="fees" element={<Fees />} />
         <Route path="receipts" element={<Receipts />} />

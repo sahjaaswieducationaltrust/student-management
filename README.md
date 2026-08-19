@@ -25,6 +25,7 @@ To use different artwork, drop your file into `backend/app/assets/` and
 | --- | --- |
 | **Children** | Enrolment with auto admission number, parents/guardian details, health & allergy notes, transport, photo-free profile cards, search + filters, per-child fee ledger |
 | **Teachers** | Staff records with auto employee number, qualification, subjects, joining date, salary, payroll total, class assignment |
+| **Non-teaching staff** | Front office, ayahs & helpers, kitchen, housekeeping, drivers and security — department, designation, duties, emergency contact, joining date, salary and payroll total, with department and status filters |
 | **Classes** | Hello Kids programmes (Pre-Nursery/Play Group, Nursery/Montessori-1, LKG/Montessori-2, UKG/Montessori-3, Daycare, Activity Club) with room, capacity, class teacher and their **own fee structure** |
 | **Fees** | Per-class fee components (one-time / monthly / quarterly / per-term / annual), **admin-negotiated agreed fee per child**, automatic instalment schedule with due dates, concessions spread proportionally over the year |
 | **Dues tracking** | Total fee / paid / balance / next due on every row of the children list, a totals bar across the whole filter, and filters for *pending*, *overdue* and *fully paid* |
@@ -112,8 +113,8 @@ The API runs at <http://127.0.0.1:8000>, interactive docs at
 On the very first start the backend creates the admin account from `.env`
 (`ADMIN_EMAIL` / `ADMIN_PASSWORD`, default `admin@school.com` / `admin123`).
 
-**Optional — load realistic demo data** (4 classes, 5 teachers, ~25 children with
-fee plans, receipts and two weeks of attendance):
+**Optional — load realistic demo data** (4 classes, 5 teachers, 6 non-teaching
+staff, ~25 children with fee plans, receipts and two weeks of attendance):
 
 ```powershell
 cd backend
@@ -229,7 +230,7 @@ student-management/
 │   │   ├── seed.py              demo data generator
 │   │   ├── check_db.py          connection tester with setup diagnostics
 │   │   ├── init_db.py           create collections, indexes and first admin
-│   │   ├── routers/             auth, students, teachers, classrooms,
+│   │   ├── routers/             auth, students, teachers, staff, classrooms,
 │   │   │                        fees, attendance, dashboard
 │   │   └── services/
 │   │       ├── counters.py      atomic admission / employee / receipt numbers
@@ -242,7 +243,7 @@ student-management/
 └── frontend/
     ├── src/
     │   ├── pages/               Login, Dashboard, Students, StudentDetail,
-    │   │                        Teachers, Classes, Fees, Receipts,
+    │   │                        Teachers, Staff, Classes, Fees, Receipts,
     │   │                        ReceiptView, Attendance, Reports, Users
     │   ├── components/          Layout, StudentForm, PaymentForm, Toast, ui
     │   ├── context/AuthContext.jsx
@@ -268,7 +269,9 @@ All routes except `/api/auth/login` need `Authorization: Bearer <token>`.
 | GET/POST/PATCH/DELETE | `/api/classrooms` | classes + fee structures |
 | GET/POST/PATCH/DELETE | `/api/students` | children |
 | POST | `/api/students/{id}/fee-plan` | (re)build the instalment schedule |
-| GET/POST/PATCH/DELETE | `/api/teachers` | staff |
+| GET/POST/PATCH/DELETE | `/api/teachers` | teaching staff |
+| GET/POST/PATCH/DELETE | `/api/staff` | non-teaching staff |
+| GET | `/api/staff/departments` | departments in use, for the filter |
 | GET | `/api/fees/ledger/{student_id}` | payable / paid / balance + schedule |
 | POST | `/api/fees/payments` | collect a payment, issues the receipt |
 | GET | `/api/fees/payments` | receipt list with filters + totals |
